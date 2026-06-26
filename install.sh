@@ -110,7 +110,6 @@ cd "$INSTALL_DIR"
 source ./config.env
 cd "$INSTALL_DIR"
 
-# shellcheck disable=SC1091
 source ./config.env
 
 export KIOSK_ADMIN_USER

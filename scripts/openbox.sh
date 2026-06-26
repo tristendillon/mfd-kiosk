@@ -3,7 +3,7 @@ set -euo pipefail
 
 install -d -o "$KIOSK_USER" -g "$KIOSK_USER" "/home/$KIOSK_USER/.config/openbox"
 
-envsubst < ./files/openbox/autostart \
+envsubst '${BROWSER_BIN}' < ./files/openbox/autostart \
   > "/home/$KIOSK_USER/.config/openbox/autostart"
 
 chmod +x "/home/$KIOSK_USER/.config/openbox/autostart"
