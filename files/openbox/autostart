@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+set -a
+source /etc/mfd-kiosk/kiosk.env
+set +a
+
 xset -dpms
 xset s off
 xset s noblank

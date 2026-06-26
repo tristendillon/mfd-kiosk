@@ -1,0 +1,192 @@
+# MFD Kiosk Setup
+
+This repository installs and configures an Ubuntu Server device as a dedicated kiosk for the MFD Alert Dashboard.
+
+---
+
+# Minimum Requirements
+
+## Hardware
+
+Minimum supported hardware:
+
+```text
+CPU: 2 cores / 2 vCPU
+RAM: 4 GB
+Storage: 32 GB SSD/eMMC
+Display: 1920×1080
+Graphics: Hardware acceleration enabled
+Network: Ethernet or Wi-Fi
+```
+
+Recommended hardware:
+
+```text
+CPU: Intel N100 or better
+RAM: 8 GB
+Storage: 64 GB SSD
+Network: Ethernet preferred
+```
+
+Example devices:
+
+- Dell Wyse 5070
+- HP t640
+- Lenovo Tiny M-series
+- Intel N100 mini PC
+- Similar x86 thin client or mini PC
+
+---
+
+# Ubuntu Server Setup
+
+Install:
+
+```text
+Ubuntu Server 26.04
+Minimized installation
+OpenSSH Server enabled
+```
+
+During Ubuntu setup:
+
+1. Select **minimized installation**.
+2. Enable **OpenSSH Server**.
+3. Create the admin/maintenance user, usually:
+
+```text
+technician
+```
+
+Do not create or use the `kiosk` user manually. The installer creates and configures the `kiosk` user automatically.
+
+---
+
+# Fresh Installation
+
+Log in as the admin user:
+
+```bash
+ssh technician@<device-ip>
+```
+
+Update Ubuntu:
+
+```bash
+sudo apt update
+sudo apt upgrade -y
+```
+
+Install Git:
+
+```bash
+sudo apt install -y git
+```
+
+Clone the repository:
+
+```bash
+git clone <repository-url>
+cd mfd-kiosk
+```
+
+Make the scripts executable:
+
+```bash
+chmod +x install.sh scripts/*.sh
+```
+
+Run the installer:
+
+```bash
+sudo ./install.sh
+```
+
+The installer will ask for the private dashboard token:
+
+```text
+Dashboard token:
+```
+
+Input is hidden while typing.
+
+Enter only the private token, not the full URL.
+
+The installer builds the kiosk URL like this:
+
+```text
+https://mfd.alertdashboard.com/<TOKEN>?sp&kiosk=1&reducedMotion=1
+```
+
+After installation, reboot:
+
+```bash
+sudo reboot
+```
+
+---
+
+# What the Installer Configures
+
+The installer will:
+
+- Create/configure the `kiosk` display user.
+- Install the lightweight GUI stack.
+- Configure automatic login.
+- Launch Chromium in kiosk mode.
+- Save the private dashboard URL locally.
+- Disable sleep and screen blanking.
+- Configure daily reboot.
+- Configure browser health checks.
+- Block SSH access for the `kiosk` user.
+- Move the installer repo to:
+
+```text
+/opt/mfd-kiosk
+```
+
+After installation, use `/opt/mfd-kiosk` as the permanent repo location.
+
+---
+
+# Updating Existing Devices
+
+SSH into the device as the admin user:
+
+```bash
+ssh technician@<device-ip>
+```
+
+Go to the installed repo:
+
+```bash
+cd /opt/mfd-kiosk
+```
+
+Pull the latest changes:
+
+```bash
+git pull
+```
+
+Make sure scripts are executable:
+
+```bash
+chmod +x install.sh scripts/*.sh
+```
+
+Run the installer again:
+
+```bash
+sudo ./install.sh
+```
+
+Enter the dashboard token when prompted.
+
+Reboot:
+
+```bash
+sudo reboot
+```
+
+The installer is designed to be safe to run multiple times.
