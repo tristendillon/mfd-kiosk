@@ -37,7 +37,14 @@ done
 # Belt-and-suspenders after the hardened update above: the candidate for
 # firefox-esr MUST come from the Mozilla repo. If it does not (pin wrong, repo
 # not indexed) we stop instead of silently pulling the Snap.
-if ! apt-cache policy firefox-esr | grep -q 'packages.mozilla.org'; then
+#
+# Capture into a variable and grep a here-string rather than
+# `apt-cache policy ... | grep -q`. With `set -o pipefail`, grep -q exits on
+# its first match and closes the pipe; apt-cache then dies of SIGPIPE (141)
+# and pipefail reports the whole pipeline as failed *even though the match
+# succeeded* — which inverted this guard and aborted on a perfectly good repo.
+policy="$(apt-cache policy firefox-esr)"
+if ! grep -q 'packages.mozilla.org' <<<"$policy"; then
   echo "ERROR: firefox-esr has no candidate from packages.mozilla.org." >&2
   echo "The Mozilla apt repo isn't indexed (key/pin/network issue)." >&2
   echo "Refusing to fall back to the Snap browser. Aborting." >&2
