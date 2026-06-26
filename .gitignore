@@ -1,0 +1,13 @@
+# Nix build outputs
+/result
+/result-*
+/os/result
+/os/result-*
+
+# direnv
+/.direnv/
+
+# scratch spike screenshots (not part of the repo)
+/firefox.png
+/webkit.png
+/stuck.png
