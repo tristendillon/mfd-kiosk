@@ -3,4 +3,4 @@ Description=Restart LightDM if kiosk browser is not running
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/bash -c 'pgrep -x ${BROWSER_BIN} >/dev/null || systemctl restart lightdm'
+ExecStart=/usr/bin/bash -c 'pgrep -f ${BROWSER_BIN} >/dev/null || systemctl restart lightdm'

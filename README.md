@@ -104,7 +104,7 @@ Clone the repository:
 
 ```bash
 git clone <repository-url>
-cd mfd-kiosk
+cd kiosk-scripts
 ```
 
 Make the scripts executable:
@@ -207,3 +207,42 @@ sudo reboot
 ```
 
 The installer is designed to be safe to run multiple times.
+
+---
+
+# Uninstalling
+
+To completely remove the kiosk from a device, run the uninstaller as the admin user:
+
+```bash
+sudo /opt/mfd-kiosk/uninstall.sh
+```
+
+If the script is not executable, make it executable first:
+
+```bash
+chmod +x /opt/mfd-kiosk/uninstall.sh
+```
+
+You will be asked to type `yes` to confirm. Pass `--yes` to skip the prompt for
+scripted runs:
+
+```bash
+sudo /opt/mfd-kiosk/uninstall.sh --yes
+```
+
+The uninstaller removes:
+
+- The `mfd-daily-reboot` and `mfd-browser-healthcheck` systemd units.
+- The lightdm, SSH, and Xorg kiosk config drop-ins (and disables lightdm).
+- The masked sleep/suspend/hibernate targets (restored to normal).
+- The `/etc/mfd-kiosk` token store.
+- The `kiosk` user and its home directory.
+- The GUI/kiosk packages (lightdm, openbox, unclutter, chromium-browser, xorg, etc.).
+- The installed repo at `/opt/mfd-kiosk`.
+
+SSH access is intentionally preserved: `openssh-server`, `git`, `curl`, and
+`ca-certificates` are **not** removed, so you can still reach and reinstall the device.
+
+The uninstaller copies itself to `/tmp` and runs from there so it can delete
+`/opt/mfd-kiosk`, then removes that temporary copy when it finishes.

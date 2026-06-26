@@ -108,9 +108,6 @@ bootstrap_to_opt
 cd "$INSTALL_DIR"
 
 source ./config.env
-cd "$INSTALL_DIR"
-
-source ./config.env
 
 export KIOSK_ADMIN_USER
 export KIOSK_USER
