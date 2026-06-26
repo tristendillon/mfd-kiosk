@@ -16,14 +16,30 @@ Pin: origin packages.mozilla.org
 Pin-Priority: 1000
 EOF
 
-apt-get update
+# Fail loudly if ANY configured repo (especially Mozilla) fails to refresh.
+# Without Error-Mode=any a transient fetch/verify failure of the Mozilla
+# InRelease only prints a warning, apt-get still exits 0, and we limp on to the
+# guard below with a misleading "package not available" message. Retry a few
+# times to ride out transient network blips during provisioning.
+for attempt in 1 2 3; do
+  if apt-get update -o APT::Update::Error-Mode=any; then
+    break
+  fi
+  if [ "$attempt" = 3 ]; then
+    echo "ERROR: apt-get update failed after 3 attempts (see warnings above)." >&2
+    exit 1
+  fi
+  echo "apt-get update failed (attempt $attempt/3); retrying in 5s..." >&2
+  sleep 5
+done
 
 # Guard: refuse to fall back to the Snap browser.
-# The candidate for firefox-esr MUST come from the Mozilla repo. If it does not
-# (repo unreachable, key/pin wrong, etc.) we stop instead of silently pulling
-# the Snap.
+# Belt-and-suspenders after the hardened update above: the candidate for
+# firefox-esr MUST come from the Mozilla repo. If it does not (pin wrong, repo
+# not indexed) we stop instead of silently pulling the Snap.
 if ! apt-cache policy firefox-esr | grep -q 'packages.mozilla.org'; then
-  echo "ERROR: firefox-esr is not available from the Mozilla apt repo." >&2
+  echo "ERROR: firefox-esr has no candidate from packages.mozilla.org." >&2
+  echo "The Mozilla apt repo isn't indexed (key/pin/network issue)." >&2
   echo "Refusing to fall back to the Snap browser. Aborting." >&2
   exit 1
 fi

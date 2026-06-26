@@ -13,7 +13,7 @@ Minimum supported hardware:
 ```text
 CPU: 2 cores / 2 vCPU
 RAM: 4 GB
-Storage: 32 GB SSD/eMMC
+Storage: 16 GB SSD/eMMC
 Display: 1920×1080
 Graphics: Hardware acceleration enabled
 Network: Ethernet or Wi-Fi
@@ -23,8 +23,8 @@ Recommended hardware:
 
 ```text
 CPU: Intel N100 or better
-RAM: 8 GB
-Storage: 64 GB SSD
+RAM: 4 GB
+Storage: 32 GB SSD
 Network: Ethernet preferred
 ```
 
@@ -103,8 +103,8 @@ sudo apt install -y git
 Clone the repository:
 
 ```bash
-git clone <repository-url>
-cd kiosk-scripts
+git clone https://github.com/tristendillon/mfd-kiosk
+cd mfd-kiosk
 ```
 
 Make the scripts executable:
@@ -336,7 +336,7 @@ The uninstaller removes:
 - The masked sleep/suspend/hibernate targets and masked daemons (restored to normal).
 - The `/etc/mfd-kiosk` token/profile store.
 - The `kiosk` user and its home directory.
-- The GUI/kiosk packages (openbox, firefox-esr, xserver-xorg-*, fonts-dejavu-core,
+- The GUI/kiosk packages (openbox, firefox-esr, xserver-xorg-\*, fonts-dejavu-core,
   systemd-zram-generator, etc.).
 - The installed repo at `/opt/mfd-kiosk`.
 
