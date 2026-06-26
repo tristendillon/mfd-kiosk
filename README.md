@@ -38,9 +38,26 @@ Example devices:
 
 ---
 
-# Ubuntu Server Setup
+# Network Requirements
 
-Install:
+The kiosk requires network access during setup and normal operation.
+
+Ethernet is preferred when available because it is more reliable and easier to support. If the device supports Power over Ethernet through a PoE adapter or dock, Ethernet is the preferred deployment option.
+
+Wi-Fi is supported, but the Wi-Fi adapter must be detected by Ubuntu Server during installation.
+
+## Preferred: Ethernet
+
+For Ethernet installs:
+
+1. Connect Ethernet before starting the Ubuntu Server installer.
+2. Allow Ubuntu to use DHCP.
+3. Enable OpenSSH Server during installation.
+4. After installation, SSH into the device and run the kiosk installer.
+
+Example:
+
+# Install:
 
 ```text
 Ubuntu Server 26.04

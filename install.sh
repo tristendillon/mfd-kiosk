@@ -108,10 +108,15 @@ bootstrap_to_opt
 cd "$INSTALL_DIR"
 
 source ./config.env
+cd "$INSTALL_DIR"
+
+# shellcheck disable=SC1091
+source ./config.env
 
 export KIOSK_ADMIN_USER
 export KIOSK_USER
-export KIOSK_URL
+export KIOSK_BASE_URL
+export KIOSK_QUERY
 export REBOOT_TIME
 export BROWSER_BIN
 export INSTALL_DIR
