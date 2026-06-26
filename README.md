@@ -107,12 +107,6 @@ git clone https://github.com/tristendillon/mfd-kiosk
 cd mfd-kiosk
 ```
 
-Make the scripts executable:
-
-```bash
-chmod +x install.sh scripts/*.sh
-```
-
 Run the installer:
 
 ```bash

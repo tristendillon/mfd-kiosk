@@ -49,3 +49,27 @@ user_pref("browser.urlbar.suggest.quicksuggest.sponsored", false);
 
 user_pref("ui.prefersReducedMotion", 1);
 user_pref("gfx.webrender.all", true);
+
+// --- Single-tab kiosk: collapse Firefox's multi-process model to cut RAM. ---
+// Only one trusted first-party dashboard is ever shown, so per-site isolation
+// (Fission) and the extra content processes are pure overhead. This trades
+// some sandbox isolation for a markedly smaller footprint.
+user_pref("fission.autostart", false);
+user_pref("dom.ipc.processCount", 1);
+user_pref("dom.ipc.processCount.webIsolated", 1);
+user_pref("browser.tabs.remote.autostart", true);
+
+// No media playback on the dashboard: drop the audio/video decoder process.
+user_pref("media.rdd-process.enabled", false);
+user_pref("media.gmp-provider.enabled", false);
+
+// No add-ons in the ephemeral profile: run built-in extensions in-process
+// instead of spawning a dedicated WebExtensions process.
+user_pref("extensions.webextensions.remote", false);
+
+// Fold networking into the parent process (one fewer helper).
+user_pref("network.process.enabled", false);
+
+// Machinery the kiosk never displays.
+user_pref("browser.newtabpage.enabled", false);
+user_pref("extensions.pocket.enabled", false);

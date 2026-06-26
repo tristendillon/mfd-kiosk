@@ -89,6 +89,41 @@ Pin: release *
 Pin-Priority: -1
 EOF
 
+# Drop firmware blobs for hardware this board does not have — hardware-aware so
+# the same image is safe on Intel *and* AMD kiosks. Rather than assume a vendor,
+# read the PCI vendor IDs actually present and only purge firmware for silicon
+# that is absent (e.g. keep linux-firmware-amd-graphics on an AMD board, keep a
+# Wi-Fi firmware package if that radio is present). Intel/generic/SOF firmware
+# is never targeted here. Reads /sys directly, so no pciutils dependency.
+present_vendors="$(cat /sys/bus/pci/devices/*/vendor 2>/dev/null | tr 'A-F' 'a-f' | sort -u)"
+
+if [ -n "$present_vendors" ]; then
+  # purge_fw_unless_present <package> <pci-vendor-id>...
+  # Purge the firmware package only if NONE of the given PCI vendor IDs is
+  # present. grep reads a here-string (no pipe) so pipefail/SIGPIPE can't bite.
+  purge_fw_unless_present() {
+    local pkg="$1"; shift
+    local id
+    for id in "$@"; do
+      if grep -qix "0x${id}" <<<"$present_vendors"; then
+        return 0   # matching hardware present -> keep the firmware
+      fi
+    done
+    DEBIAN_FRONTEND=noninteractive apt-get purge -y "$pkg" 2>/dev/null || true
+  }
+
+  purge_fw_unless_present linux-firmware-nvidia-graphics    10de
+  purge_fw_unless_present linux-firmware-amd-graphics       1002
+  purge_fw_unless_present linux-firmware-qualcomm-misc      17cb 168c
+  purge_fw_unless_present linux-firmware-qualcomm-wireless  17cb 168c
+  purge_fw_unless_present linux-firmware-mediatek           14c3 14c4 0e8d
+  purge_fw_unless_present linux-firmware-mellanox-spectrum  15b3
+  purge_fw_unless_present linux-firmware-marvell-prestera   11ab 1b4b
+else
+  # Fail safe: if we cannot enumerate PCI vendors, keep all firmware.
+  echo "WARN: could not read PCI vendor IDs; skipping firmware trim." >&2
+fi
+
 # Reclaim disk used during install.
 apt-get clean
 journalctl --vacuum-size=50M 2>/dev/null || true
