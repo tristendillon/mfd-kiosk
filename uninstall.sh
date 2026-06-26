@@ -16,8 +16,6 @@ for arg in "$@"; do
   esac
 done
 
-# Pull KIOSK_USER / INSTALL_DIR from the installed config if available, so we
-# remove exactly what was installed. Fall back to the installer defaults.
 if [[ -z "${MFD_UNINSTALL_STAGED:-}" ]] && [[ -f "$SCRIPT_DIR/config.env" ]]; then
   # shellcheck disable=SC1091
   source "$SCRIPT_DIR/config.env"
@@ -28,9 +26,6 @@ INSTALL_DIR="${INSTALL_DIR:-/opt/mfd-kiosk}"
 
 STAGED_PATH="/tmp/mfd-kiosk-uninstall.sh"
 
-# ---------------------------------------------------------------------------
-# Stage 1: confirm, then relocate to /tmp so we can delete $INSTALL_DIR safely.
-# ---------------------------------------------------------------------------
 if [[ -z "${MFD_UNINSTALL_STAGED:-}" ]]; then
   cat <<EOF
 
@@ -38,13 +33,18 @@ This will COMPLETELY remove the MFD kiosk from this device:
 
   - systemd units:   mfd-browser-healthcheck.{service,timer},
                      mfd-daily-reboot.{service,timer}
-  - lightdm config:  /etc/lightdm/lightdm.conf.d/50-mfd-kiosk.conf (and disables lightdm)
+  - autologin:       /etc/systemd/system/getty@tty1.service.d/override.conf
+  - X config:        /etc/X11/Xwrapper.config, /etc/X11/xorg.conf.d/10-monitor.conf
   - ssh config:      /etc/ssh/sshd_config.d/99-mfd-kiosk.conf
-  - xorg config:     /etc/X11/xorg.conf.d/10-monitor.conf
+  - firefox policy:  /etc/firefox/policies/policies.json
+  - mozilla repo:    sources/key/pin + /etc/apt/preferences.d/no-snapd
+  - zram/journald:   /etc/systemd/zram-generator.conf, journald cap drop-in
+  - masked daemons:  ModemManager, multipathd (unmasked)
   - sleep targets:   unmasked (sleep/suspend/hibernate/hybrid-sleep)
   - token store:     /etc/mfd-kiosk
   - user:            $KIOSK_USER (and its home directory)
-  - packages:        lightdm, openbox, unclutter, chromium-browser, xorg, etc.
+  - packages:        openbox, firefox-esr, xserver-xorg-*, fonts-dejavu-core,
+                     systemd-zram-generator, etc.
                      (openssh-server, git, curl, ca-certificates are KEPT)
   - install dir:     $INSTALL_DIR
 
@@ -68,15 +68,10 @@ EOF
   exec "$STAGED_PATH" --yes
 fi
 
-# ---------------------------------------------------------------------------
-# Stage 2: running from /tmp. Tear everything down.
-# ---------------------------------------------------------------------------
 echo "[uninstall] Stopping kiosk services."
 
-# Disable the healthcheck first so it cannot restart lightdm mid-teardown.
 systemctl disable --now mfd-browser-healthcheck.timer mfd-browser-healthcheck.service 2>/dev/null || true
 systemctl disable --now mfd-daily-reboot.timer mfd-daily-reboot.service 2>/dev/null || true
-systemctl disable --now lightdm 2>/dev/null || true
 
 echo "[uninstall] Removing systemd unit files."
 rm -f /etc/systemd/system/mfd-browser-healthcheck.service \
@@ -90,8 +85,26 @@ echo "[uninstall] Restoring power management."
 systemctl unmask sleep.target suspend.target hibernate.target hybrid-sleep.target 2>/dev/null || true
 rm -f /etc/X11/xorg.conf.d/10-monitor.conf
 
-echo "[uninstall] Removing config drop-ins."
-rm -f /etc/lightdm/lightdm.conf.d/50-mfd-kiosk.conf
+echo "[uninstall] Restoring masked kiosk daemons."
+systemctl unmask ModemManager.service multipathd.service 2>/dev/null || true
+
+echo "[uninstall] Removing autologin and X session config."
+rm -f /etc/systemd/system/getty@tty1.service.d/override.conf
+rmdir /etc/systemd/system/getty@tty1.service.d 2>/dev/null || true
+rm -f /etc/X11/Xwrapper.config
+systemctl daemon-reload
+
+echo "[uninstall] Removing Firefox policy, zram, and journald drop-ins."
+rm -f /etc/firefox/policies/policies.json
+rmdir /etc/firefox/policies /etc/firefox 2>/dev/null || true
+rm -f /etc/systemd/zram-generator.conf
+rm -f /etc/systemd/journald.conf.d/00-kiosk.conf
+
+echo "[uninstall] Removing Mozilla apt repo and snapd pin."
+rm -f /etc/apt/sources.list.d/mozilla.list \
+      /etc/apt/keyrings/packages.mozilla.org.asc \
+      /etc/apt/preferences.d/mozilla \
+      /etc/apt/preferences.d/no-snapd
 
 if [[ -f /etc/ssh/sshd_config.d/99-mfd-kiosk.conf ]]; then
   rm -f /etc/ssh/sshd_config.d/99-mfd-kiosk.conf
@@ -109,16 +122,16 @@ fi
 
 echo "[uninstall] Purging kiosk packages (openssh-server/git/curl are kept)."
 DEBIAN_FRONTEND=noninteractive apt-get purge -y \
-  lightdm \
-  lightdm-gtk-greeter \
+  firefox-esr \
   openbox \
-  unclutter \
-  chromium-browser \
-  xorg \
+  xserver-xorg-core \
+  xserver-xorg-legacy \
+  xserver-xorg-input-libinput \
+  xinit \
   x11-xserver-utils \
   dbus-x11 \
-  fonts-dejavu \
-  fonts-liberation 2>/dev/null || true
+  fonts-dejavu-core \
+  systemd-zram-generator 2>/dev/null || true
 DEBIAN_FRONTEND=noninteractive apt-get autoremove --purge -y 2>/dev/null || true
 
 echo "[uninstall] Removing install directory: $INSTALL_DIR"
@@ -128,6 +141,4 @@ echo
 echo "Uninstall complete. The MFD kiosk has been fully removed."
 echo "SSH access (openssh-server) was preserved."
 
-# Clean up this staged copy. The script is already loaded into memory, so
-# removing the file on disk is safe.
 rm -f "$STAGED_PATH"

@@ -4,21 +4,15 @@ set -a
 . /etc/mfd-kiosk/kiosk.env
 set +a
 
-xset -dpms
-xset s off
-xset s noblank
-
-unclutter -idle 1 -root &
+PROFILE="${XDG_RUNTIME_DIR}/mfd-firefox-profile"
+rm -rf "$PROFILE"
+mkdir -p "$PROFILE"
+install -m 644 /etc/mfd-kiosk/firefox/user.js "$PROFILE/user.js"
 
 while true; do
   ${BROWSER_BIN} \
+    --profile "$PROFILE" \
     --kiosk \
-    --noerrdialogs \
-    --disable-session-crashed-bubble \
-    --disable-infobars \
-    --disable-features=TranslateUI \
-    --check-for-update-interval=31536000 \
-    --force-prefers-reduced-motion \
     "${KIOSK_URL}"
 
   sleep 5

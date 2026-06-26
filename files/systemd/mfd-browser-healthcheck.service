@@ -1,6 +1,6 @@
 [Unit]
-Description=Restart LightDM if kiosk browser is not running
+Description=Restart the kiosk session if the browser is not running
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/bash -c 'pgrep -f ${BROWSER_BIN} >/dev/null || systemctl restart lightdm'
+ExecStart=/usr/bin/bash -c 'pgrep -u ${KIOSK_USER} -f ${BROWSER_BIN} >/dev/null || systemctl restart getty@tty1.service'

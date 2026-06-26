@@ -112,7 +112,6 @@ source ./config.env
 export KIOSK_ADMIN_USER
 export KIOSK_USER
 export KIOSK_BASE_URL
-export KIOSK_QUERY
 export REBOOT_TIME
 export BROWSER_BIN
 export INSTALL_DIR
@@ -122,17 +121,18 @@ echo "[install] Admin user: $KIOSK_ADMIN_USER"
 echo "[install] Kiosk user: $KIOSK_USER"
 
 ./scripts/packages.sh
+./scripts/firefox.sh
 ./scripts/users.sh
 ./scripts/ssh.sh
 ./scripts/token.sh
-./scripts/lightdm.sh
+./scripts/session.sh
 ./scripts/openbox.sh
 ./scripts/power.sh
+./scripts/slim.sh
 ./scripts/timers.sh
 ./scripts/healthcheck.sh
 
 systemctl daemon-reload
-systemctl enable lightdm
 systemctl enable mfd-daily-reboot.timer
 systemctl enable mfd-browser-healthcheck.timer
 
