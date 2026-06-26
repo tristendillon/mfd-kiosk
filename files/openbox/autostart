@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+
+xset -dpms
+xset s off
+xset s noblank
+
+unclutter -idle 1 -root &
+
+while true; do
+  ${BROWSER_BIN} \
+    --kiosk \
+    --noerrdialogs \
+    --disable-session-crashed-bubble \
+    --disable-infobars \
+    --disable-features=TranslateUI \
+    --check-for-update-interval=31536000 \
+    --force-prefers-reduced-motion \
+    "${KIOSK_URL}"
+
+  sleep 5
+done &
