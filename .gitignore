@@ -4,6 +4,11 @@
 /os/result
 /os/result-*
 
+# Copied-out ISO artifacts (`nix run ./os#iso` writes ./dist; stray *.iso copies)
+/dist/
+/os/dist/
+*.iso
+
 # direnv
 /.direnv/
 

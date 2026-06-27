@@ -4,10 +4,16 @@
 # (Intel N100, AMD APUs, typical thin clients) without a per-board
 # hardware-configuration.nix. Drivers/firmware load by PCI id at boot.
 {
-  # Common storage/USB/input controllers + virtio for VM testing.
+  # Common storage/USB/input controllers + virtio for VM testing. eMMC modules
+  # (mmc_block/sdhci*) are essential: the target boards boot from internal eMMC
+  # (/dev/mmcblk0) and without these the initrd can't find or mount root.
   boot.initrd.availableKernelModules = [
     "ahci"
     "nvme"
+    "mmc_block"
+    "sdhci"
+    "sdhci_pci"
+    "sdhci_acpi"
     "xhci_pci"
     "ehci_pci"
     "usbhid"
@@ -16,9 +22,28 @@
     "virtio_pci"
     "virtio_blk"
     "virtio_scsi"
+    # VMware SCSI controllers (firmware can read the disk to load the UKI, but the
+    # kernel needs these or root vanishes after handoff → emergency mode). Covers
+    # Paravirtual (PVSCSI), LSI Logic Parallel, and LSI Logic SAS.
+    "vmw_pvscsi"
+    "mptspi"
+    "mpt3sas"
   ];
 
   boot.kernelModules = [ "kvm-intel" "kvm-amd" ];
+
+  # Root + ESP are identified by label/partlabel from the prebuilt image
+  # (see image.nix). This replaces the mounts disko used to generate.
+  fileSystems."/" = {
+    device = "/dev/disk/by-label/nixos";
+    fsType = "ext4";
+  };
+
+  fileSystems."/boot" = {
+    device = "/dev/disk/by-partlabel/esp";
+    fsType = "vfat";
+    options = [ "umask=0077" ];
+  };
 
   # Microcode + redistributable firmware for both vendors (see slim.nix for the
   # firmware toggle). Cheap insurance for a mixed Intel/AMD fleet.

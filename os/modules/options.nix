@@ -47,13 +47,13 @@
       description = "Runtime file holding KIOSK_URL; outside the Nix store.";
     };
 
-    extraCogArgs = lib.mkOption {
+    extraFirefoxArgs = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [ ];
-      example = [ "--config=/etc/mfd-kiosk/cog.ini" ];
+      example = [ "--width=1920" "--height=1080" ];
       description = ''
-        Extra arguments passed to cog. Use this if Google Maps ever UA-sniffs and
-        you need a user-agent override via a cog config file.
+        Extra arguments spliced into the firefox-esr command line before the URL.
+        The launcher already passes --profile and --kiosk.
       '';
     };
   };

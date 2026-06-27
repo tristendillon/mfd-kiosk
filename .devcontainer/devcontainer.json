@@ -8,6 +8,17 @@
   "workspaceFolder": "/workspace",
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
 
+  // Building the kiosk disk image runs `systemd-repart`, which calls `unshare`
+  // to set up a private mount namespace. Docker's default profile strips that
+  // capability (CapEff=0), so repart dies with "unshare: Operation not
+  // permitted". These args grant just enough for unprivileged namespaces.
+  // (Swap for ["--privileged"] if a future repart op needs more.)
+  "runArgs": [
+    "--cap-add=SYS_ADMIN",
+    "--security-opt", "seccomp=unconfined",
+    "--security-opt", "apparmor=unconfined"
+  ],
+
   "mounts": ["source=lunarhue-containers-nix-store,target=/nix,type=volume"],
 
   "containerEnv": {
