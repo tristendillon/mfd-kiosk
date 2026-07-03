@@ -2,7 +2,8 @@
 
 # USB installer live environment. Boots straight into an interactive wizard on
 # tty1 (no login, no command to type) that collects the per-device identity
-# (hostname, dashboard base URL, optional Wi-Fi credentials, technician
+# (hostname, dashboard base URL, optional Wi-Fi credentials — validated live
+# against real hardware before they're accepted, technician
 # password, optional SSH keys), streams the prebuilt
 # compressed kiosk image onto the chosen internal disk with `zstd -dc | dd`
 # (copying bytes needs almost no RAM, so 2 GB boards provision fine), then
@@ -37,7 +38,9 @@ let
 
   mfdInstall = pkgs.writeShellApplication {
     name = "mfd-install";
-    runtimeInputs = with pkgs; [ util-linux coreutils gawk zstd mkpasswd openssh systemd ];
+    # iwd provides iwctl, used to live-test Wi-Fi credentials in step 3 (same
+    # stack the installed kiosk runs). util-linux provides rfkill.
+    runtimeInputs = with pkgs; [ util-linux coreutils gawk gnugrep zstd mkpasswd openssh systemd iwd ];
     text = ''
       img="/iso/mfd-kiosk.raw.zst"
 
@@ -93,17 +96,56 @@ In VMware: VM Settings > Options > Advanced > Firmware type > UEFI."
         echo "Invalid: must look like http(s)://host/path with no spaces."
       done
 
-      # ---- 3. Wi-Fi credentials (optional) -----------------------------------
+      # ---- 3. Wi-Fi credentials (optional, live-validated) -------------------
       # Blank SSID skips Wi-Fi entirely; the kiosk runs ethernet-only and its
       # radio stays idle (no /var/lib/iwd profile is stamped).
+      #
+      # A non-blank SSID is validated against real hardware before it's
+      # accepted: we detect a wireless adapter, then actually scan for and
+      # associate with the network using iwd (iwctl) — the same stack the kiosk
+      # runs — so a machine with no Wi-Fi card, an out-of-range/mistyped SSID,
+      # or a wrong passphrase is caught HERE instead of silently failing after
+      # install. This whole step is a retry loop; every path except "connected"
+      # and "blank" returns to the SSID prompt, and a blank SSID always escapes.
+      #
+      # The script runs under `set -euo pipefail`, so every iwctl call (which
+      # can exit nonzero for transient reasons) is guarded with `|| true` or an
+      # `if`, and every wait has an explicit timeout so tty1 can't hang. The
+      # passphrase is passed via --passphrase and never printed in any message.
       echo
       wifi_ssid=""
       wifi_pass=""
-      read -rp "Wi-Fi SSID (blank = wired ethernet only): " wifi_ssid
-      if [ -n "$wifi_ssid" ]; then
-        if [ "''${#wifi_ssid}" -gt 32 ]; then
-          die_pause "Wi-Fi SSID must be 1-32 bytes."
+      wifi_prev=""
+      while :; do
+        if [ -n "$wifi_prev" ]; then
+          # Prefill the last attempt so the user can fix a typo (or clear it to skip).
+          read -e -i "$wifi_prev" -rp "Wi-Fi SSID (blank = wired ethernet only): " wifi_ssid
+        else
+          read -rp "Wi-Fi SSID (blank = wired ethernet only): " wifi_ssid
         fi
+        wifi_prev=""
+        if [ -z "$wifi_ssid" ]; then
+          break                                   # blank -> wired ethernet only
+        fi
+        if [ "''${#wifi_ssid}" -gt 32 ]; then
+          echo "Wi-Fi SSID must be 1-32 bytes — try again (or blank to skip)."
+          continue
+        fi
+
+        # Detect a wireless adapter. Clear any soft rfkill block first, else a
+        # present card can look absent.
+        rfkill unblock wifi || true
+        shopt -s nullglob
+        wifi_devs=(/sys/class/net/*/wireless)
+        shopt -u nullglob
+        if [ "''${#wifi_devs[@]}" -eq 0 ]; then
+          echo "No Wi-Fi adapter detected on this machine — this kiosk can only use wired ethernet."
+          echo "Leave the SSID blank to continue with wired ethernet only."
+          continue
+        fi
+        # /sys/class/net/<dev>/wireless -> <dev>
+        dev="$(basename "$(dirname "''${wifi_devs[0]}")")"
+
         echo "Set the Wi-Fi passphrase (WPA2-PSK, 8-63 characters)."
         while :; do
           read -rsp "Passphrase: " w1; echo
@@ -117,7 +159,68 @@ In VMware: VM Settings > Options > Advanced > Firmware type > UEFI."
           fi
         done
         wifi_pass="$w1"
-      fi
+
+        echo ">> Testing Wi-Fi on $dev ..."
+
+        # (a) Wait for iwd to claim the interface (it may need a moment at boot).
+        if_ready=""
+        for _ in $(seq 1 10); do
+          if iwctl station "$dev" show >/dev/null 2>&1; then
+            if_ready=1
+            break
+          fi
+          sleep 1
+        done
+        if [ -z "$if_ready" ]; then
+          echo "Wi-Fi adapter '$dev' is not ready (iwd did not claim it) — try again, or blank to skip."
+          wifi_prev="$wifi_ssid"; wifi_pass=""
+          continue
+        fi
+
+        # (b) Scan (may already be in progress) and wait up to ~15s for the SSID.
+        iwctl station "$dev" scan >/dev/null 2>&1 || true
+        seen=""
+        for _ in $(seq 1 15); do
+          if iwctl station "$dev" get-networks 2>/dev/null | grep -qF -- "$wifi_ssid"; then
+            seen=1
+            break
+          fi
+          sleep 1
+        done
+        if [ -z "$seen" ]; then
+          echo "Network '$wifi_ssid' not found — check the SSID / move closer to the AP."
+          wifi_prev="$wifi_ssid"; wifi_pass=""
+          continue
+        fi
+
+        # (c) Connect non-interactively. iwctl returns once it has ISSUED the
+        # connect, so its exit status is not proof of association — poll State
+        # for up to ~30s. "connected" as a whole word never matches
+        # "disconnected", so this distinguishes success from failure.
+        iwctl --passphrase "$wifi_pass" station "$dev" connect "$wifi_ssid" >/dev/null 2>&1 || true
+        connected=""
+        for _ in $(seq 1 30); do
+          if iwctl station "$dev" show 2>/dev/null | grep -qw connected; then
+            connected=1
+            break
+          fi
+          sleep 1
+        done
+        if [ -z "$connected" ]; then
+          iwctl station "$dev" disconnect >/dev/null 2>&1 || true
+          iwctl known-networks "$wifi_ssid" forget >/dev/null 2>&1 || true
+          echo "Could not connect to '$wifi_ssid' — likely a wrong passphrase."
+          wifi_prev="$wifi_ssid"; wifi_pass=""
+          continue
+        fi
+
+        # Success. Don't leave the live session associated or remembering the
+        # network — the installed kiosk gets its own stamped profile.
+        echo "Wi-Fi OK: connected to '$wifi_ssid'."
+        iwctl station "$dev" disconnect >/dev/null 2>&1 || true
+        iwctl known-networks "$wifi_ssid" forget >/dev/null 2>&1 || true
+        break
+      done
 
       # ---- 4. technician password --------------------------------------------
       echo
@@ -286,6 +389,14 @@ in
 
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
   networking.hostName = "mfd-flasher";
+
+  # Bring up the same Wi-Fi stack the installed kiosk uses (iwd) so the wizard
+  # can live-test Wi-Fi credentials (scan + associate) before flashing. The
+  # radio stays idle until iwctl is driven by the wizard. installation-cd-minimal
+  # leaves networking.wireless.enable = false, so there's no wpa_supplicant/iwd
+  # conflict. Redistributable Wi-Fi firmware is already carried by the installer
+  # profile (hardware.enableRedistributableFirmware = true).
+  networking.wireless.iwd.enable = true;
 
   # SSH into the live flasher for headless provisioning (run `mfd-install`
   # remotely). Reuses the recovery key(s) baked into the kiosk.

@@ -27,7 +27,8 @@ technician runs on a board.
 1. **Boot the VM.** It comes up as the `mfd-flasher` live environment and
    drops straight into the install wizard on tty1.
 2. **Run the wizard** — hostname, dashboard base URL (Enter accepts the
-   default), Wi-Fi SSID (leave blank — VMs have no Wi-Fi hardware), technician
+   default), Wi-Fi SSID (leave blank — VMs have no Wi-Fi hardware, so entering
+   an SSID now fails fast with "no Wi-Fi adapter detected"), technician
    password, optional SSH keys, pick the virtual disk, type `ERASE`. Full
    walkthrough in [installing.md](installing.md).
 3. **Disconnect the ISO** from the VM (the wizard's "remove the USB stick"
