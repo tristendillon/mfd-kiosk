@@ -28,9 +28,7 @@
 
     # Optional fleet-wide recovery key(s). Per-device credentials (technician
     # password + SSH keys) are collected by the install wizard instead.
-    adminKeys = [
-      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPx4F6/sjRoTRcGcE+BZhP2NTRrPTFAu6QV4JIVivElc tristen@windows"
-    ];
+    adminKeys = [];
   };
 
   # Best-effort IP-based timezone at boot (tzupdate sets time.timeZone = null
