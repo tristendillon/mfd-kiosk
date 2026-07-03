@@ -43,6 +43,12 @@
   networking.useNetworkd = true;
   networking.useDHCP = lib.mkDefault true;
 
+  # A kiosk is wired OR wireless — one of the two links is usually unplugged.
+  # By default wait-online wants EVERY managed interface configured, so the
+  # dangling one stalls boot ("Wait for Network to be Configured") and fails
+  # network-online (tzupdate etc.). Any one working interface is enough.
+  systemd.network.wait-online.anyInterface = true;
+
   # Optional Wi-Fi via iwd (lighter than wpa_supplicant, integrates natively
   # with systemd-networkd). The radio stays idle unless the install wizard
   # stamped credentials into /var/lib/iwd on the flashed root; ethernet is

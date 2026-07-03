@@ -116,6 +116,8 @@ In VMware: VM Settings > Options > Advanced > Firmware type > UEFI."
       wifi_ssid=""
       wifi_pass=""
       wifi_prev=""
+      wifi_file=""
+      wifi_profile=""
       while :; do
         if [ -n "$wifi_prev" ]; then
           # Prefill the last attempt so the user can fix a typo (or clear it to skip).
@@ -214,9 +216,19 @@ In VMware: VM Settings > Options > Advanced > Firmware type > UEFI."
           continue
         fi
 
-        # Success. Don't leave the live session associated or remembering the
-        # network — the installed kiosk gets its own stamped profile.
+        # Success. Capture the known-network profile iwd itself just wrote —
+        # its FILENAME and format are authoritative (iwd keeps SSIDs with
+        # spaces as plain names; our old hand-rolled rule hex-encoded them, so
+        # the installed kiosk never matched the file and never autoconnected).
+        # Must happen BEFORE `forget`, which deletes the file. At most one
+        # profile exists here: every earlier attempt was forgotten.
         echo "Wi-Fi OK: connected to '$wifi_ssid'."
+        shopt -s nullglob
+        for f in /var/lib/iwd/*.psk; do
+          wifi_file="$(basename "$f")"
+          wifi_profile="$(cat "$f")"
+        done
+        shopt -u nullglob
         iwctl station "$dev" disconnect >/dev/null 2>&1 || true
         iwctl known-networks "$wifi_ssid" forget >/dev/null 2>&1 || true
         break
@@ -346,20 +358,24 @@ In VMware: VM Settings > Options > Advanced > Firmware type > UEFI."
         chmod 0644 "$mnt${stateDir}/authorized_keys/${adminUser}"
       fi
 
-      # Optional Wi-Fi: write iwd's native profile onto the flashed root. iwd
-      # names the file after the SSID (<ssid>.psk); for SSIDs with characters
-      # outside [A-Za-z0-9_-] it uses =<hex>.psk, where <hex> is the lowercase
-      # hex of the raw SSID bytes. iwd reads the passphrase verbatim after
-      # "Passphrase=" (no escaping inside the file).
+      # Optional Wi-Fi: stamp the exact known-network profile iwd wrote during
+      # the live test (captured in step 3) — filename and format are iwd's own,
+      # so the installed kiosk is guaranteed to match it. The fallback below
+      # should be unreachable (the test must succeed to get here) but keeps a
+      # raw hand-off working; it follows iwd's REAL naming rule: alnum, space,
+      # '-' and '_' stay plain (<ssid>.psk), anything else is =<lowercase hex>.psk.
       if [ -n "$wifi_ssid" ]; then
         install -d -m 0700 "$mnt/var/lib/iwd"
-        if [[ "$wifi_ssid" =~ ^[A-Za-z0-9_-]+$ ]]; then
-          wifi_file="$wifi_ssid.psk"
-        else
-          wifi_hex="$(printf '%s' "$wifi_ssid" | od -An -tx1 | tr -d ' \n')"
-          wifi_file="=$wifi_hex.psk"
+        if [ -z "$wifi_file" ]; then
+          if [[ "$wifi_ssid" =~ ^[A-Za-z0-9\ _-]+$ ]]; then
+            wifi_file="$wifi_ssid.psk"
+          else
+            wifi_hex="$(printf '%s' "$wifi_ssid" | od -An -tx1 | tr -d ' \n')"
+            wifi_file="=$wifi_hex.psk"
+          fi
+          wifi_profile="$(printf '[Security]\nPassphrase=%s' "$wifi_pass")"
         fi
-        printf '[Security]\nPassphrase=%s\n' "$wifi_pass" > "$mnt/var/lib/iwd/$wifi_file"
+        printf '%s\n' "$wifi_profile" > "$mnt/var/lib/iwd/$wifi_file"
         chmod 0600 "$mnt/var/lib/iwd/$wifi_file"
       fi
 
