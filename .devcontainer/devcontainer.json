@@ -1,0 +1,59 @@
+{
+  "name": "${localWorkspaceFolderBasename} — Nix Dev Environment",
+  "build": {
+    "context": ".",
+    "dockerfile": "Dockerfile"
+  },
+
+  "workspaceFolder": "/workspace",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=cached",
+
+  // Building the kiosk disk image runs `systemd-repart`, which calls `unshare`
+  // to set up a private mount namespace. Docker's default profile strips that
+  // capability (CapEff=0), so repart dies with "unshare: Operation not
+  // permitted". These args grant just enough for unprivileged namespaces.
+  // (Swap for ["--privileged"] if a future repart op needs more.)
+  "runArgs": [
+    "--cap-add=SYS_ADMIN",
+    "--security-opt", "seccomp=unconfined",
+    "--security-opt", "apparmor=unconfined"
+  ],
+
+  "mounts": ["source=lunarhue-containers-nix-store,target=/nix,type=volume"],
+
+  "containerEnv": {
+    "NIX_CONFIG": "experimental-features = nix-command flakes"
+  },
+
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "username": "vscode",
+      "uid": "1000",
+      "gid": "1000",
+      "installZsh": false,
+      "installOhMyZsh": false,
+      "configureZshAsDefaultShell": false
+    },
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {
+      "version": "latest",
+      "enableNonRootDocker": "true",
+      "moby": "false"
+    }
+  },
+
+  "postCreateCommand": "bash .devcontainer/create.sh",
+  "postStartCommand": "bash .devcontainer/start.sh",
+
+  "customizations": {
+    "vscode": {
+      "extensions": ["mkhl.direnv", "jnoortheen.nix-ide"],
+      "settings": {
+        "nix.enableLanguageServer": true,
+        "nix.serverPath": "nil",
+        "nix.formatterPath": "nixpkgs-fmt"
+      }
+    }
+  },
+
+  "remoteUser": "vscode"
+}

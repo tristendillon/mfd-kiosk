@@ -1,0 +1,6 @@
+[Unit]
+Description=Daily reboot for MFD kiosk
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/reboot

@@ -1,0 +1,9 @@
+[Unit]
+Description=Run daily MFD kiosk reboot
+
+[Timer]
+OnCalendar=*-*-* ${REBOOT_TIME}:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
