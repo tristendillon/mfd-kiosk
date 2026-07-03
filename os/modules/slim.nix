@@ -58,4 +58,12 @@
   # Trim other defaults that pull weight on a headless-ish appliance.
   xdg.autostart.enable = false;
   xdg.mime.enable = lib.mkForce true; # firefox wants shared-mime-info (minimal.nix disables it)
+
+  # One locale is all a single-site kiosk needs; drop the multi-hundred-MB glibc
+  # locale archive down to just en_US.
+  i18n.supportedLocales = [ "en_US.UTF-8/UTF-8" ];
+
+  # No interactive shell tab-completion lookups on an appliance — drop the
+  # command-not-found programs.sqlite database from the closure.
+  programs.command-not-found.enable = false;
 }

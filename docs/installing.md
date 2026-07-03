@@ -14,6 +14,14 @@ network provisions fine.
   setup. The kiosk image has no BIOS boot code — a machine left in legacy mode
   would flash successfully and then fail to boot with *"Operating System not
   found"*. The wizard refuses to run under legacy BIOS for exactly this reason.
+- Set **"Restore on AC Power Loss"** (a.k.a. *AC Power Recovery* / *After Power
+  Failure* / *State After Power On*, wording varies by vendor) to **Power On**
+  (or *Last State*). This is what makes the kiosk turn itself back on after an
+  outage — a power blip, or the weekly generator test where mains drops and the
+  generator picks up. Left on the common default ("Stay Off"), the board stays
+  dark after every power event until someone physically presses the power
+  button. **The OS cannot control this** — it is firmware-only, so it must be
+  set here, per machine.
 - Use the firmware's one-time boot menu (usually F12/F11/Esc) to boot from the
   USB stick, so you don't have to change the permanent boot order.
 
@@ -119,3 +127,33 @@ renders fullscreen.
   at build time. Root SSH and the `kiosk` display user are always denied.
 - The machine reboots itself daily at `mfd.kiosk.rebootTime` (default 04:00,
   i.e. 4 AM local time).
+
+### Power loss & auto-recovery
+
+The kiosk is built to come back on its own, unattended, after any of these:
+
+- **Power restored after an outage** (blip, or the weekly generator test) — the
+  board powers on **only if** the firmware's *Restore on AC Power Loss* is set to
+  Power On (see [Firmware prep](#1-firmware-prep-one-time-per-machine)); then it
+  boots straight to the dashboard with no keypress. There is no boot menu to wait
+  on and no login to type — the token is already stamped, so the browser starts
+  automatically.
+- **Browser crash** — the compositor restarts it within ~2s, and never gives up
+  no matter how fast it crash-loops.
+- **A tab exhausts RAM** — the worst offender is killed (earlyoom) and the
+  browser restarts, rather than the whole box stalling.
+- **Kernel panic / total system hang** — the machine reboots itself: a panic
+  reboots after 10s, and a hardware watchdog resets the board if it wedges
+  entirely.
+- **Nightly hygiene** — a clean reboot at `mfd.kiosk.rebootTime`.
+
+An **unclean** power-off (yanking mains mid-write) is expected and safe: the
+root filesystem journals and repairs automatically on the next boot, and the
+kiosk writes very little at runtime. Note a *flickering* supply (rapid off/on/off
+during a rough generator transfer) is harder on the hardware than a clean
+off-then-on — that's a firmware/power concern, not something the OS can smooth
+over.
+
+To rehearse this in a VM, **hard power-off** the guest (not a graceful shutdown)
+and power it back on: it should boot straight to the dashboard. The AC-recovery
+behavior itself is real-hardware-only (a VM has no "AC" to lose).

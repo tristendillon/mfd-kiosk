@@ -25,9 +25,11 @@
   # Smaller, faster initrd (also required by the repart grow in image.nix).
   boot.initrd.systemd.enable = true;
 
-  # Few generations ever exist (re-flash model); keep the boot menu/store tiny.
-  boot.loader.systemd-boot.configurationLimit = lib.mkDefault 2;
+  # Immutable single-generation appliance; keep the boot menu/store tiny.
+  boot.loader.systemd-boot.configurationLimit = lib.mkDefault 1;
 
-  # Hardlink-dedup identical store files on the eMMC.
-  nix.settings.auto-optimise-store = true;
+  # The appliance never builds or rebuilds itself (re-flashed to update), so the
+  # Nix daemon + CLI are pure dead weight — drop them from the closure entirely.
+  # This also makes auto-optimise-store moot (no daemon to run it), so it's gone.
+  nix.enable = false;
 }

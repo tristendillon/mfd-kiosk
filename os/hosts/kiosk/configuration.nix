@@ -11,6 +11,7 @@
     ../../modules/ssh.nix
     ../../modules/slim.nix
     ../../modules/perf.nix
+    ../../modules/reliability.nix
     ../../modules/maintenance.nix
     ../../modules/secrets.nix
     ../../modules/identity.nix

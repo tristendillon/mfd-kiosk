@@ -167,6 +167,12 @@ in
   # merge only concatenates when at least one definition is a list.
   systemd.services."cage-tty1".unitConfig.ConditionPathExists = [ cfg.tokenFile ];
 
+  # Never stop restarting. systemd's default start-rate limit (5 starts / 10s),
+  # combined with RestartSec=2s below, would trip during a crash-loop and drop
+  # cage into a failed state — a permanently blank screen until the daily reboot.
+  # A kiosk must keep retrying forever; RestartSec still throttles to every 2s.
+  systemd.services."cage-tty1".unitConfig.StartLimitIntervalSec = 0;
+
   # Start the browser the moment a token is written (mfd-set-token also does an
   # explicit restart to pick up token *changes*; this covers first creation).
   systemd.paths.mfd-kiosk-start = {
