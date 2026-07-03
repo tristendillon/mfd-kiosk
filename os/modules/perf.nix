@@ -16,6 +16,15 @@
     "systemd.show_status=auto"
   ];
 
+  # A kiosk never runs virtual machines, so the KVM hypervisor modules are dead
+  # weight. The kernel auto-loads kvm-intel/kvm-amd by CPU vendor; under VMware
+  # (no nested VT-x exposed) that attempt fails and prints a red-herring
+  # "kvm_intel: VMX not supported by CPU N" on the console — the last line before
+  # the intentionally-blank kiosk screen, so it reads like a boot error when it
+  # isn't. Blacklisting stops the load attempt entirely: clean console in the VM,
+  # one less unused module on the real board.
+  boot.blacklistedKernelModules = [ "kvm-intel" "kvm-amd" ];
+
   # Tuned for the zstd zram swap configured in slim.nix.
   boot.kernel.sysctl = {
     # High swappiness favors pushing cold pages into compressed RAM swap over
