@@ -40,9 +40,21 @@
   # image, drivers load by PCI id — this replaces the per-board PCI-vendor purge.
   hardware.enableRedistributableFirmware = true;
 
-  # Display-only: nothing here needs print/mDNS discovery.
+  # Display-only: no print discovery needed.
   services.printing.enable = false;
-  services.avahi.enable = false;
+
+  # mDNS so admins can reach the box at <hostname>.local over SSH without
+  # knowing its DHCP address. publish/addresses advertises this host's IP;
+  # nssmdns stays off (the kiosk needs to be *found*, not to resolve others).
+  # openFirewall defaults true, opening UDP 5353. Avahi reads the runtime
+  # hostname (set early by mfd-hostname) and re-advertises on rename.
+  services.avahi = {
+    enable = true;
+    publish = {
+      enable = true;
+      addresses = true;
+    };
+  };
 
   # Trim other defaults that pull weight on a headless-ish appliance.
   xdg.autostart.enable = false;

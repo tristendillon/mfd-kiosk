@@ -12,34 +12,45 @@
     ../../modules/slim.nix
     ../../modules/maintenance.nix
     ../../modules/secrets.nix
+    ../../modules/identity.nix
   ];
 
-  networking.hostName = "mfd-kiosk";
+  # Empty = no static hostname baked into the image. The real per-device name
+  # (e.g. mfd-fh-05-kiosk) is entered in the install wizard and applied at boot
+  # from /var/lib/mfd/hostname by mfd-hostname.service (identity.nix).
+  networking.hostName = "";
 
   # ---- Site configuration ---------------------------------------------------
   mfd.kiosk = {
+    # DEFAULT dashboard base URL offered by the install wizard; the effective
+    # per-device value is entered there and stored in /var/lib/mfd/base-url.
     baseUrl = "https://mfd.alertdashboard.com";
-    rebootTime = "04:00";
 
-    # TODO: paste the technician's SSH public key(s) here. Without at least one
-    # key you will not be able to log in (PasswordAuthentication is off).
+    # Optional fleet-wide recovery key(s). Per-device credentials (technician
+    # password + SSH keys) are collected by the install wizard instead.
     adminKeys = [
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPx4F6/sjRoTRcGcE+BZhP2NTRrPTFAu6QV4JIVivElc tristen@windows"
     ];
-
-    # NOTE: inert now — the prebuilt image is disk-agnostic and the USB flasher
-    # (mfd-flash) prompts for the target disk at flash time. Kept only so older
-    # references don't break; it no longer affects the build.
-    diskDevice = "/dev/sda";
   };
 
-  # TODO: confirm the timezone for this department.
-  time.timeZone = lib.mkDefault "America/Chicago";
+  # Best-effort IP-based timezone at boot (tzupdate sets time.timeZone = null
+  # for us). Falls back to UTC when offline/undetectable, which shifts the daily
+  # reboot but breaks nothing.
+  services.tzupdate.enable = true;
 
   # Wired networking by default via systemd-networkd + DHCP.
   systemd.network.enable = true;
   networking.useNetworkd = true;
   networking.useDHCP = lib.mkDefault true;
+
+  # Optional Wi-Fi via iwd (lighter than wpa_supplicant, integrates natively
+  # with systemd-networkd). The radio stays idle unless the install wizard
+  # stamped credentials into /var/lib/iwd on the flashed root; ethernet is
+  # preferred when both links are up. With useNetworkd + useDHCP, NixOS gives
+  # the generated wireless DHCP network a higher RouteMetric (1025) than wired
+  # (1024, the systemd default) for both IPv4 and IPv6, so a live ethernet link
+  # always wins the default route — no explicit metric override needed.
+  networking.wireless.iwd.enable = true;
 
   # Boot is handled by the UKI + systemd-boot fallback baked into the image
   # (see modules/image.nix); no on-disk bootloader install step here.
