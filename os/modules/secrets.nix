@@ -48,7 +48,10 @@ let
       url="''${base%/}/$token"
       dir="$(dirname "${cfg.tokenFile}")"
 
-      install -d -m 0750 -o root -g "${cfg.kioskUser}" "$dir"
+      # 0751 (not 0750): the o+x traverse bit lets the technician stat the token
+      # file for the login-prompt check below, without letting non-kiosk users
+      # list the dir or read the token (the file itself stays 0640 root:kiosk).
+      install -d -m 0751 -o root -g "${cfg.kioskUser}" "$dir"
       umask 027
       printf "KIOSK_URL='%s'\n" "$url" > "${cfg.tokenFile}"
       chown "root:${cfg.kioskUser}" "${cfg.tokenFile}"
@@ -67,8 +70,10 @@ in
   # Ensure the directory exists; the token file itself is written at runtime by
   # mfd-set-token, never by Nix. The directory must exist anyway so the
   # mfd-kiosk-start path unit (browser.nix) can watch for the file appearing.
+  # 0751 so the admin (a non-kiosk-group user) can traverse to stat the token
+  # file in the login check below; the 0640 file keeps the token itself private.
   systemd.tmpfiles.rules = [
-    "d ${builtins.dirOf cfg.tokenFile} 0750 root ${cfg.kioskUser} -"
+    "d ${builtins.dirOf cfg.tokenFile} 0751 root ${cfg.kioskUser} -"
   ];
 
   # Unprovisioned kiosk: the screen is intentionally blank, so prompt for the
