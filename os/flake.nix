@@ -2,10 +2,12 @@
   description = "MFD kiosk — declarative NixOS appliance";
 
   inputs = {
-    # Tracks the release that matches system.stateVersion (25.11). The browser is
-    # firefox-esr (see modules/browser.nix), which is carried across releases, so
+    # Current stable NixOS. Bumped off 25.11 once it hit end-of-support
+    # (2026-06-30) — an EOL release makes systemd print a red "past its
+    # end-of-support date" warning on every boot (initrd + stage-2). The browser
+    # is firefox-esr (see modules/browser.nix), carried across releases, so
     # nothing forces an older pin.
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
   };
 
   outputs = { self, nixpkgs, ... }:

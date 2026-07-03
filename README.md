@@ -74,7 +74,7 @@ nixpkgs:
 ```
 flake.nix              # DEV environment (nixos-unstable); what direnv loads
 .devcontainer/         # VS Code dev container (Debian + single-user Nix)
-os/                    # the APPLIANCE flake (pinned nixos-25.11)
+os/                    # the APPLIANCE flake (pinned nixos-26.05)
   flake.nix            #   nixosConfigurations.{kiosk,flasherIso}; `nix run ./os#iso`, `.#image`
   hosts/kiosk/         #   configuration.nix (site config), hardware.nix (generic HW profile)
   modules/             #   image (repart disk image), flasher (USB installer + wizard),

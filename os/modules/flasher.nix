@@ -409,11 +409,23 @@ in
 
   # Bring up the same Wi-Fi stack the installed kiosk uses (iwd) so the wizard
   # can live-test Wi-Fi credentials (scan + associate) before flashing. The
-  # radio stays idle until iwctl is driven by the wizard. installation-cd-minimal
-  # leaves networking.wireless.enable = false, so there's no wpa_supplicant/iwd
-  # conflict. Redistributable Wi-Fi firmware is already carried by the installer
-  # profile (hardware.enableRedistributableFirmware = true).
+  # radio stays idle until iwctl is driven by the wizard. Redistributable Wi-Fi
+  # firmware is already carried by the installer profile
+  # (hardware.enableRedistributableFirmware = true).
+  #
+  # 26.05's installer profile enables NetworkManager (for nmtui), whose default
+  # wpa_supplicant backend flips networking.wireless.enable = true — which is now
+  # mutually exclusive with iwd (assertion in the iwd module). We don't use NM:
+  # the wizard drives iwctl directly and would fight NM's connection management,
+  # so force it off and keep raw iwd (the flasher's pre-26.05 behavior). Wired
+  # DHCP for headless SSH provisioning still comes up via the installer default.
+  networking.networkmanager.enable = lib.mkForce false;
   networking.wireless.iwd.enable = true;
+
+  # The live flasher boots from the ISO squashfs and never imports a ZFS pool
+  # (ZFS support is only carried because the installer profile bundles it), so
+  # adopt 26.11's upcoming default explicitly and silence the boot-time warning.
+  boot.zfs.forceImportRoot = false;
 
   # SSH into the live flasher for headless provisioning (run `mfd-install`
   # remotely). Reuses the recovery key(s) baked into the kiosk.
