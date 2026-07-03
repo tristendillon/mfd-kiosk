@@ -6,15 +6,17 @@
 {
   imports = [
     "${modulesPath}/profiles/minimal.nix"
-    # NOTE: profiles/perlless.nix is NOT imported. It was originally dropped
-    # because cog → webkitgtk dragged perl into the closure (via gperftools'
-    # `pprof` and aspell/hspell), which trips perlless'
-    # `system.forbiddenDependenciesRegexes = ["perl"]`. The browser is now
-    # firefox-esr, so the webkit constraint is gone — but Firefox has its own
-    # build-time perl users, so re-enabling perlless still needs verification.
-    # That is a deliberate follow-up (the "slim down later" task), not done here.
-    # profiles/minimal.nix above already gives the real footprint wins (docs off,
-    # environment.defaultPackages = [], no containers/udisks2).
+    # NOTE: profiles/perlless.nix is NOT imported. The old cog → webkitgtk perl
+    # leak is gone (browser is firefox-esr now), but perl STILL enters the
+    # closure and trips perlless' `forbiddenDependenciesRegexes = ["perl"]`.
+    # Verified empirically: importing perlless fails the toplevel build, and
+    # `nix why-depends` traces every remaining perl path to one runtime source —
+    #   firefox-esr → xdg-utils → perl (xdg-utils is a bundle of perl scripts;
+    #   it pulls File-MimeInfo, Net-DBus, XML-Parser, libwww-perl, …).
+    # Dropping xdg-utils from firefox's closure is the unsolved blocker; until
+    # then perlless stays off. profiles/minimal.nix above still gives the real
+    # footprint wins (docs off, environment.defaultPackages = [], no
+    # containers/udisks2).
   ];
 
   # No nixos-install / nixos-enter / nixos-generate on an immutable appliance.

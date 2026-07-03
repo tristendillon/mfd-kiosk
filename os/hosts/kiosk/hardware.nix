@@ -33,10 +33,13 @@
   boot.kernelModules = [ "kvm-intel" "kvm-amd" ];
 
   # Root + ESP are identified by label/partlabel from the prebuilt image
-  # (see image.nix). This replaces the mounts disko used to generate.
+  # (see image.nix).
   fileSystems."/" = {
     device = "/dev/disk/by-label/nixos";
     fsType = "ext4";
+    # noatime: don't write an access timestamp on every read — fewer metadata
+    # writes (less eMMC wear) and slightly faster reads. /boot is left as-is.
+    options = [ "noatime" ];
   };
 
   fileSystems."/boot" = {

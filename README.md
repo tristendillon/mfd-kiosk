@@ -3,7 +3,7 @@
 Declarative NixOS appliance that boots straight into a fullscreen
 **firefox-esr** kiosk (under the [cage](https://github.com/cage-kiosk/cage)
 Wayland compositor) showing the MFD dashboard. Replaces the previous imperative
-Ubuntu + bash setup (kept under `legacy/` for reference).
+Ubuntu + bash setup.
 
 Targets low-end boards: **2 GB RAM, 8 GB eMMC**. The OS is built as a finished,
 compressed **disk image** on a dev box and streamed onto the board by a USB
@@ -81,7 +81,6 @@ os/                    # the APPLIANCE flake (pinned nixos-25.11)
                        #   browser (cage + firefox-esr), identity (per-device state),
                        #   user, ssh, secrets (token), maintenance, minimal, slim, options
 docs/                  # build / flash / install / VM-test guides
-legacy/                # frozen Ubuntu/bash setup, for reference
 ```
 
 ## Configuration

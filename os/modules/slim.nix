@@ -1,7 +1,6 @@
 { lib, ... }:
 
-# Replaces slim.sh and the firmware logic in packages.sh. Most of the old work
-# (purging snap/cloud-init/kdump/unattended-upgrades) is unnecessary: minimal
+# No purging of snap/cloud-init/kdump/unattended-upgrades is needed: minimal
 # NixOS never installs them in the first place.
 {
   # Compressed RAM swap so a single tab can't OOM a low-RAM box. On a 2 GB
@@ -37,7 +36,7 @@
   environment.defaultPackages = lib.mkForce [ ];
 
   # Firmware for whatever board this lands on (Intel i915 / AMD amdgpu). One
-  # image, drivers load by PCI id — this replaces the per-board PCI-vendor purge.
+  # image, drivers load by PCI id.
   hardware.enableRedistributableFirmware = true;
 
   # Display-only: no print discovery needed.

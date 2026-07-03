@@ -1,7 +1,7 @@
 { config, ... }:
 
-# Replaces timers.sh. Declarative daily reboot. (Browser crash-restart lives in
-# browser.nix via Restart=always, replacing healthcheck.sh.)
+# Declarative daily reboot; browser crash-restart lives in browser.nix
+# (Restart=always).
 let
   cfg = config.mfd.kiosk;
 in

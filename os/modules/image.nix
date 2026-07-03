@@ -3,7 +3,7 @@
 # Builds the kiosk as a prebuilt, compressed disk image (`system.build.image`)
 # via systemd-repart — NOT an in-place nixos-install. The image is flashed onto
 # the board's eMMC by the USB flasher (see flasher.nix), so nothing builds on the
-# 2 GB board at provision time. Replaces hosts/kiosk/disk.nix (disko).
+# 2 GB board at provision time.
 #
 # Why repart and not disko's diskoImages: `systemd-repart` runs directly in the
 # Nix sandbox with no qemu/VM, which matters on build hosts without /dev/kvm.

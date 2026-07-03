@@ -4,7 +4,7 @@
   inputs = {
     # Tracks the release that matches system.stateVersion (25.11). The browser is
     # firefox-esr (see modules/browser.nix), which is carried across releases, so
-    # there is no longer a cog-driven pin holding this back.
+    # nothing forces an older pin.
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
   };
 
@@ -52,6 +52,7 @@
               name = "mfd-build-iso";
               runtimeInputs = [ pkgs.coreutils pkgs.diffutils ];
               text = ''
+                #!/usr/bin/env bash
                 shopt -s nullglob
                 isos=("${self.packages.${system}.iso}"/iso/*.iso)
                 if [ ''${#isos[@]} -eq 0 ]; then

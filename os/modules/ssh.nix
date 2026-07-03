@@ -1,7 +1,7 @@
 { config, ... }:
 
-# Replaces ssh.sh. Admin-only SSH: password (set by the install wizard) or key;
-# the kiosk user is display-only and must never be reachable; root disabled.
+# Admin-only SSH: password (set by the install wizard) or key; the kiosk user is
+# display-only and must never be reachable; root disabled.
 let
   cfg = config.mfd.kiosk;
 in

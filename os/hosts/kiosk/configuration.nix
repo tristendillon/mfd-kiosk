@@ -10,6 +10,7 @@
     ../../modules/user.nix
     ../../modules/ssh.nix
     ../../modules/slim.nix
+    ../../modules/perf.nix
     ../../modules/maintenance.nix
     ../../modules/secrets.nix
     ../../modules/identity.nix
@@ -46,6 +47,10 @@
   # dangling one stalls boot ("Wait for Network to be Configured") and fails
   # network-online (tzupdate etc.). Any one working interface is enough.
   systemd.network.wait-online.anyInterface = true;
+
+  # Bound the wait so a genuinely-offline box reaches the login/blank screen
+  # sooner instead of stalling on the ~120s default. 30s is ample for DHCP.
+  systemd.network.wait-online.timeout = 30;
 
   # Optional Wi-Fi via iwd (lighter than wpa_supplicant, integrates natively
   # with systemd-networkd). The radio stays idle unless the install wizard

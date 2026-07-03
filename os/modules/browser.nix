@@ -1,10 +1,9 @@
 { config, pkgs, lib, ... }:
 
 # Boots straight into fullscreen firefox-esr (Gecko) under the cage Wayland
-# compositor. Replaces the previous cog/WPE-WebKit launcher; cage, the cage-tty1
-# hardening, hardware.graphics and the sleep-disable stay as-is. Dropping cog
-# also drops the whole webkitgtk subtree from the closure — it was only ever a
-# transitive dependency of cog and is named nowhere else.
+# compositor. Bundles the cage-tty1 hardening (blank tty1 until a token exists,
+# crash-restart), enables hardware.graphics for WebGL, and disables all sleep so
+# the display stays live as an always-on appliance.
 let
   cfg = config.mfd.kiosk;
 
@@ -104,9 +103,17 @@ let
     user_pref("browser.newtabpage.enabled", false);
     user_pref("extensions.pocket.enabled", false);
 
+    // --- Bounded caches & no back/forward page cache: single-URL kiosk. ---
+    user_pref("browser.cache.memory.capacity", 51200);
+    user_pref("browser.sessionhistory.max_total_viewers", 0);
+    user_pref("browser.sessionhistory.max_entries", 5);
+    user_pref("toolkit.cosmeticAnimations.enabled", false);
+    user_pref("browser.tabs.animate", false);
+    user_pref("browser.fullscreen.animate", false);
+
     // --- VM / vmwgfx GPU fallbacks (RESERVE — uncomment only if the dashboard
-    // renders blank/garbled in VMware; the Gecko analog of the old cog
-    // WEBKIT_DISABLE_DMABUF_RENDERER workaround). ---
+    // renders blank/garbled in VMware; these force Firefox onto safer,
+    // software/no-dmabuf rendering paths for the vmwgfx driver). ---
     // user_pref("gfx.webrender.software", true);
     // user_pref("widget.dmabuf.force-enabled", false);
     // user_pref("media.ffmpeg.vaapi.enabled", false);
@@ -177,16 +184,16 @@ in
   systemd.services."getty@tty1".enable = false;
   systemd.services."autovt@tty1".enable = false;
 
-  # Crash -> restart (replaces the old 2-minute healthcheck poll). cage names the
-  # unit after the tty, so it stays `cage-tty1` regardless of which program it
-  # runs. NOTE: confirm on first boot with `systemctl status cage-tty1`.
+  # Crash -> restart. cage names the unit after the tty, so it stays `cage-tty1`
+  # regardless of which program it runs. NOTE: confirm on first boot with
+  # `systemctl status cage-tty1`.
   systemd.services."cage-tty1".serviceConfig = {
     Restart = lib.mkForce "always";
     RestartSec = "2s";
     # Soft cap on 2 GB boards: past this the kernel reclaims this slice's pages
-    # (into zram) rather than killing it. Firefox is heavier than cog was, so
-    # treat this as a starting value and re-check real RSS after first boot; a
-    # hard OOM is left to earlyoom (slim.nix), which trips before the box stalls.
+    # (into zram) rather than killing it. Treat this as a starting value and
+    # re-check real RSS after first boot; a hard OOM is left to earlyoom
+    # (slim.nix), which trips before the box stalls.
     MemoryHigh = "1400M";
   };
 
@@ -195,7 +202,7 @@ in
   hardware.graphics.enable = true;
 
   # Display-only appliance: never sleep, and (by running no idle daemon) never
-  # blank. This replaces the X DPMS config in the old power.sh.
+  # blank.
   systemd.targets.sleep.enable = false;
   systemd.targets.suspend.enable = false;
   systemd.targets.hibernate.enable = false;

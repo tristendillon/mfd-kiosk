@@ -1,7 +1,6 @@
 { config, lib, ... }:
 
-# Replaces users.sh and the autologin half of session.sh. cage handles VT
-# auto-login of the kiosk user, so no getty override is needed.
+# cage handles VT auto-login of the kiosk user, so no getty override is needed.
 let
   cfg = config.mfd.kiosk;
 in

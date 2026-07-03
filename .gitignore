@@ -11,10 +11,3 @@
 
 # direnv
 /.direnv/
-
-# scratch spike screenshots (not part of the repo)
-/firefox.png
-/webkit.png
-/stuck.png
-
-nixls

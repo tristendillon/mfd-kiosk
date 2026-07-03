@@ -1,6 +1,6 @@
 { config, pkgs, ... }:
 
-# Replaces token.sh. The per-device token is provisioned at install time (and
+# The per-device token is provisioned at install time (and
 # re-settable over SSH) into a runtime file OUTSIDE the Nix store, so it never
 # lands in git or a world-readable store path.
 let
@@ -10,6 +10,7 @@ let
     name = "mfd-set-token";
     runtimeInputs = [ pkgs.coreutils pkgs.systemd ];
     text = ''
+      #!/usr/bin/env bash
       if [ "$(id -u)" -ne 0 ]; then
         echo "Run as root: sudo mfd-set-token" >&2
         exit 1
@@ -40,7 +41,7 @@ let
         *[[:space:]]*) echo "Token cannot contain whitespace." >&2; exit 1 ;;
       esac
 
-      # Mirror token.sh normalisation: strip a leading slash and any query string.
+      # Normalise the token: strip a leading slash and any query string.
       token="''${token#/}"
       token="''${token%%\?*}"
 
