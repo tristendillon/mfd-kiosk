@@ -24,6 +24,13 @@ jobs:
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@v16
 
+      # The repart image builder fakes root inside the Nix sandbox with
+      # `unshare --map-root-user`. Ubuntu 24.04 runners block unprivileged user
+      # namespaces via AppArmor, which fails that nested unshare
+      # ("write failed /proc/self/uid_map: Operation not permitted").
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
       - name: Build ISO
         run: nix build ./os#iso -L
 
