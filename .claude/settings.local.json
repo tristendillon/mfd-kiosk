@@ -6,7 +6,8 @@
       "Bash(nix run *)",
       "Bash(nix eval *)",
       "Bash(sudo tee -a /etc/nix/nix.custom.conf)",
-      "Bash(sudo tail -n 6 /etc/nix/nix.custom.conf)"
+      "Bash(sudo tail -n 6 /etc/nix/nix.custom.conf)",
+      "Bash(nix build *)"
     ]
   }
 }

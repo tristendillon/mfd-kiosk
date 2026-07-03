@@ -155,6 +155,28 @@ in
     program = launcher;
   };
 
+  # No token -> no browser -> blank tty1. Must be a LIST: the cage module sets
+  # its own ConditionPathExists as a string ("/dev/tty1"), and the unit-option
+  # merge only concatenates when at least one definition is a list.
+  systemd.services."cage-tty1".unitConfig.ConditionPathExists = [ cfg.tokenFile ];
+
+  # Start the browser the moment a token is written (mfd-set-token also does an
+  # explicit restart to pick up token *changes*; this covers first creation).
+  systemd.paths.mfd-kiosk-start = {
+    description = "Start kiosk browser when the dashboard token appears";
+    wantedBy = [ "multi-user.target" ];
+    pathConfig = {
+      PathExists = cfg.tokenFile;
+      Unit = "cage-tty1.service";
+    };
+  };
+
+  # Keep tty1 truly blank while cage is condition-blocked (no token yet):
+  # otherwise logind's autovt would put a login prompt there. Local debug login
+  # stays available on tty2+.
+  systemd.services."getty@tty1".enable = false;
+  systemd.services."autovt@tty1".enable = false;
+
   # Crash -> restart (replaces the old 2-minute healthcheck poll). cage names the
   # unit after the tty, so it stays `cage-tty1` regardless of which program it
   # runs. NOTE: confirm on first boot with `systemctl status cage-tty1`.

@@ -1,134 +1,120 @@
 # MFD kiosk (NixOS)
 
 Declarative NixOS appliance that boots straight into a fullscreen
-[cog](https://github.com/Igalia/cog) (WPE WebKit) kiosk showing the MFD
-dashboard. Replaces the previous imperative Ubuntu + bash setup (kept under
-`legacy/` for reference).
+**firefox-esr** kiosk (under the [cage](https://github.com/cage-kiosk/cage)
+Wayland compositor) showing the MFD dashboard. Replaces the previous imperative
+Ubuntu + bash setup (kept under `legacy/` for reference).
 
 Targets low-end boards: **2 GB RAM, 8 GB eMMC**. The OS is built as a finished,
-compressed **disk image** on a dev box and **flashed** onto the board from a USB
-stick — nothing is built on the device, so the 2 GB never has to hold a build.
-Devices are immutable and **re-flashed to update**.
+compressed **disk image** on a dev box and streamed onto the board by a USB
+**flasher** — nothing builds or downloads on the device. Devices are immutable
+and **re-flashed to update**; the only per-device state (hostname, technician
+credentials, dashboard token, optional Wi-Fi credentials) lives outside the
+image.
 
-## Why this exists
+## Getting the flasher
 
-- **Reproducible** — the whole device is one flake; a byte-identical image per board.
-- **Lighter** — cog/WPE renders the dashboard in far less RAM than Firefox.
-- **Fits 2 GB / 8 GB** — minimal profile, zram, earlyoom, grow-to-fill on first boot.
-- **One image, Intel + AMD** — drivers/firmware load by PCI id; no per-board work.
+Grab a prebuilt ISO from the repo's **[Releases](../../releases)** page — no
+Nix, no build. Because the ISO is ~3 GB and GitHub caps release assets at 2 GiB,
+it is published **split** into `mfd-kiosk-flasher.iso.part0`,
+`mfd-kiosk-flasher.iso.part1`, … alongside a `SHA256SUMS`. Download every part
+plus `SHA256SUMS`, then reassemble:
 
-> **nixpkgs pin:** the appliance is pinned to **nixos-25.05**, the last release
-> that ships `cog`. cog was removed in 25.11 ("depends on unmaintained
-> libraries"); don't bump past 25.05 without replacing the browser first.
+```sh
+# Linux / macOS
+cat mfd-kiosk-flasher.iso.part* > mfd-kiosk-flasher.iso
+```
 
-## Layout
+```bat
+:: Windows (cmd)
+copy /b mfd-kiosk-flasher.iso.part0+mfd-kiosk-flasher.iso.part1 mfd-kiosk-flasher.iso
+```
 
-Two flakes on purpose, so the dev tools and the appliance can pin different
+Verify before flashing:
+
+```sh
+sha256sum -c SHA256SUMS            # Linux / macOS (checks parts + whole ISO)
+```
+
+```bat
+:: Windows — compare against the mfd-kiosk-flasher.iso line in SHA256SUMS
+certutil -hashfile mfd-kiosk-flasher.iso SHA256
+```
+
+Then continue at [docs/flashing-usb.md](docs/flashing-usb.md).
+
+> Release ISOs are **fleet-generic** — per-device and per-site settings
+> (hostname, dashboard URL, credentials) are collected by the install wizard,
+> not baked in. **Building from source**
+> ([docs/building.md](docs/building.md)) is the secondary path — for
+> development or when you need to change the baked-in defaults or recovery keys.
+
+Maintainers: see [docs/releasing.md](docs/releasing.md) for how CI and the
+release pipeline work.
+
+## From zero to a running kiosk
+
+1. **Get** the flasher ISO — download a [release](#getting-the-flasher), or
+   build from source ([docs/building.md](docs/building.md))
+2. **Write** it to a USB stick with Etcher or Rufus —
+   [docs/flashing-usb.md](docs/flashing-usb.md)
+3. **Install** on the device: boot the stick, answer the wizard, set the
+   dashboard token — [docs/installing.md](docs/installing.md)
+4. Or rehearse the whole flow in a VM first —
+   [docs/testing-vmware.md](docs/testing-vmware.md)
+
+> The image is **UEFI-only**. Targets (and test VMs) must boot in UEFI mode
+> with CSM/legacy disabled — the docs above call this out where it matters.
+
+## Repo layout
+
+Two flakes on purpose, so the dev tools and the appliance pin different
 nixpkgs:
 
 ```
-flake.nix              # DEV environment (nixos-unstable + claude-code); what direnv loads
-.envrc                 # use flake
+flake.nix              # DEV environment (nixos-unstable); what direnv loads
 .devcontainer/         # VS Code dev container (Debian + single-user Nix)
-os/                    # the APPLIANCE flake (pinned nixos-25.05)
-  flake.nix            #   nixosConfigurations.{kiosk,flasherIso}; `.#image`, `nix run ./os#iso`
-  hosts/kiosk/         #   configuration.nix, hardware.nix (+ filesystems)
-  modules/             #   browser, user, ssh, slim, minimal, image, flasher,
-                       #   maintenance, secrets, options
+os/                    # the APPLIANCE flake (pinned nixos-25.11)
+  flake.nix            #   nixosConfigurations.{kiosk,flasherIso}; `nix run ./os#iso`, `.#image`
+  hosts/kiosk/         #   configuration.nix (site config), hardware.nix (generic HW profile)
+  modules/             #   image (repart disk image), flasher (USB installer + wizard),
+                       #   browser (cage + firefox-esr), identity (per-device state),
+                       #   user, ssh, secrets (token), maintenance, minimal, slim, options
+docs/                  # build / flash / install / VM-test guides
 legacy/                # frozen Ubuntu/bash setup, for reference
 ```
 
-## Develop
+## Configuration
 
-Open the repo in the dev container (VS Code: "Reopen in Container"). It builds a
-Debian image with single-user Nix, claims the persistent `/nix` volume, and
-`direnv` auto-loads the dev shell from the root `flake.nix` (nix linters/
-formatter, `nil` LSP, claude-code).
+Release ISOs are fleet-generic: the image needs no per-site editing before
+building. A few defaults still live in `os/hosts/kiosk/configuration.nix`:
 
-## Configure
+- `mfd.kiosk.baseUrl` — the default dashboard base URL the wizard offers
+  (default `https://mfd.alertdashboard.com`); the installer pre-fills it and
+  Enter accepts. The per-device token is appended at runtime, never stored in
+  the image.
+- `mfd.kiosk.adminKeys` — optional fleet-wide recovery SSH key(s) for the
+  `technician` account. The only remaining baked-in site knob worth setting.
+- `mfd.kiosk.rebootTime` — daily reboot time (default `04:00`, meaning 4 AM
+  local).
+- **Timezone** is not configured anywhere — it's detected automatically at boot
+  by IP geolocation (best effort), falling back to UTC when offline.
 
-The appliance is the **`os/`** flake. Edit `os/hosts/kiosk/configuration.nix`
-before building:
+Per-device settings (hostname, dashboard base URL, optional Wi-Fi credentials,
+technician password, SSH keys) are collected by the **install wizard** at flash
+time, not in the flake — one image serves the whole fleet.
 
-- `mfd.kiosk.adminKeys` — **required**: technician SSH public key(s). SSH is
-  key-only; an empty list fails the build by assertion (so you can't lock
-  yourself out). Generate one on the technician's machine with
-  `ssh-keygen -t ed25519` and paste the `.pub` line here.
-- `mfd.kiosk.baseUrl` — dashboard base URL (token appended at runtime).
-- `time.timeZone` — confirm for the department.
-
-(`mfd.kiosk.diskDevice` is now inert — the image is disk-agnostic and the flasher
-prompts for the target disk. It's kept only so old references don't break.)
-
-## Build the flasher USB
-
-The build produces the kiosk **disk image** and bakes it onto a bootable
-**flasher ISO** (the USB carries the image; the board never builds anything).
-Run from the **repo root** — `nix run` builds it and copies a real, transferable
-file to `./dist/` (a plain `nix build` only leaves a `/nix/store` symlink):
-
-```sh
-nix run ./os#iso
-# -> ./dist/mfd-kiosk-flasher.iso   (git-ignored; carries the prebuilt image)
-```
-
-The image build runs `systemd-repart` **in the Nix sandbox — no qemu/KVM
-needed**. Want just the bare disk image (e.g. to `dd` directly in the lab)?
-`nix build ./os#image` → `result/mfd-kiosk_*.raw.zst`.
-
-> **Heads up — the first build compiles WebKit from source** (cog pulls an
-> uncached `webkitgtk_4_0`; ~13 GB peak RAM, 1–2 h). On a memory-limited box it
-> will OOM and can take down Docker/WSL unless you cap build parallelism and give
-> the VM swap headroom first. **Read [`docs/BUILDING.md`](docs/BUILDING.md)
-> before your first build** — it covers the root cause, the one-time env setup,
-> the isolated WebKit build, and troubleshooting.
-
-Then move the ISO onto the host: in the dev container, right-click it in the VS
-Code explorer → **Download**, or (on WSL) copy from
-`\\wsl.localhost\<distro>\...\dist\`. Write it to a USB stick (Rufus / Ventoy /
-`dd`).
-
-## Provision a board: USB → eMMC → running kiosk
-
-Same steps on a VM (test in **VMware**) and on real hardware. **No network or
-RAM headroom needed at flash time** — the image streams straight to disk.
-
-1. **Boot the board from the USB.** It comes up as the `mfd-flasher` live
-   environment (SSH is on, so you can also flash it headless).
-2. **Flash the internal disk:**
-
-   ```sh
-   sudo mfd-flash
-   ```
-
-   It lists disks → prompts for the **internal** target (e.g. `/dev/mmcblk0`) →
-   requires typing `ERASE` → streams the image with `zstd -dc | dd` (RAM-free).
-3. **Remove the USB and reboot.** On first boot the root partition **grows to
-   fill the disk**, the machine comes up as `mfd-kiosk`, auto-logs in the `kiosk`
-   user, and renders cog fullscreen on the dashboard.
-4. **Set the per-device token.** SSH in as `technician` (key-only) and run:
-
-   ```sh
-   sudo mfd-set-token
-   ```
-
-   Until then the screen shows a "run `mfd-set-token`" message instead of the
-   dashboard — that just means the token isn't provisioned yet.
-
-Measure footprint on the running system (PSS, all child procs):
-
-```sh
-smem -t -P 'cog|WPE'
-```
-
-Google Maps **performance** is only meaningful on hardware with a real GPU.
+Connectivity is wired ethernet by default; the wizard can also collect an
+optional per-device WPA2 Wi-Fi network (ethernet is preferred when both are up).
+Details in [docs/installing.md](docs/installing.md).
 
 ## Day-2
 
-- **Update = re-flash.** Rebuild the ISO (`nix run ./os#iso`) and re-provision.
-  Devices are immutable; there is no on-device `nixos-rebuild`.
-- Re-set the token anytime over SSH: `sudo mfd-set-token`.
-- The token lives only in `/etc/mfd-kiosk/kiosk.env` (root:kiosk 0640) — never in
-  git or the Nix store.
-- Adding/rotating a technician key means rebuilding the image (`adminKeys` are
-  baked in) and re-flashing.
+- **Update = re-flash.** Rebuild the ISO and re-run the installer; there is no
+  on-device `nixos-rebuild`.
+- Set or rotate the dashboard token any time: SSH in as `technician`, run
+  `sudo mfd-set-token`.
+- The token lives only in `/etc/mfd-kiosk/kiosk.env` (root:kiosk 0640) — never
+  in git or the Nix store.
+- Browser crashes auto-restart; the box reboots itself daily at
+  `rebootTime`.

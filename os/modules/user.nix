@@ -25,15 +25,13 @@ in
     isNormalUser = true;
     description = "MFD kiosk administrator";
     extraGroups = [ "wheel" ];
+    # Optional baked recovery keys; per-device keys come from the install
+    # wizard via sshd's extra AuthorizedKeysFile path (see ssh.nix).
     openssh.authorizedKeys.keys = cfg.adminKeys;
-    hashedPassword = "!"; # key-only login; sudo is passwordless below
+    # Password hash is per-device state written by the install wizard. If the
+    # file is missing (raw-dd'd image), activation warns and locks the account.
+    hashedPasswordFile = "${cfg.stateDir}/${cfg.adminUser}.hash";
   };
 
-  # Admin logs in by SSH key only, so there is no password to type for sudo.
   security.sudo.wheelNeedsPassword = lib.mkDefault false;
-
-  assertions = [{
-    assertion = cfg.adminKeys != [ ];
-    message = "mfd.kiosk.adminKeys is empty — set at least one SSH key or you will be locked out.";
-  }];
 }
