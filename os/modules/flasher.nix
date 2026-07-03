@@ -42,6 +42,7 @@ let
     # stack the installed kiosk runs). util-linux provides rfkill.
     runtimeInputs = with pkgs; [ util-linux coreutils gawk gnugrep zstd mkpasswd openssh systemd iwd ];
     text = ''
+      #!/usr/bin/env bash
       img="/iso/mfd-kiosk.raw.zst"
 
       # On failure, wait for an acknowledgement; the systemd unit has
