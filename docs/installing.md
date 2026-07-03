@@ -30,7 +30,12 @@ through:
 3. **Wi-Fi (optional)** — leave the SSID blank for wired ethernet (the default,
    and preferred when both are available); or enter the SSID and WPA2 passphrase
    of the device network. If you enter an SSID, the passphrase (8–63 chars) is
-   asked twice with hidden input.
+   asked twice with hidden input. The wizard then **verifies the credentials
+   against the real hardware**: it checks the machine actually has a Wi-Fi
+   adapter (if not, it says so — the kiosk can only use wired ethernet) and
+   actually connects to the network before accepting them. A failed test
+   (no adapter, network not found, or wrong passphrase) loops back to the SSID
+   prompt so you can retype it or leave it blank to skip Wi-Fi.
 4. **Technician password** — for the `technician` account (local console tty2+
    and SSH).
 5. **SSH keys (optional)** — per-device public keys for `technician`; paste one
