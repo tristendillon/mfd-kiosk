@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//nix/store/nc7fasfa2sgrwycr0n7dwncxpppr2lsx-nixos-minimal-25.11.20260624.03c7292-x86_64-linux.iso/**)",
+      "Read(//nix/store/nc7fasfa2sgrwycr0n7dwncxpppr2lsx-nixos-minimal-25.11.20260624.03c7292-x86_64-linux.iso/iso/**)",
+      "Bash(nix run *)",
+      "Bash(nix eval *)",
+      "Bash(sudo tee -a /etc/nix/nix.custom.conf)",
+      "Bash(sudo tail -n 6 /etc/nix/nix.custom.conf)",
+      "Bash(nix build *)"
+    ]
+  }
+}

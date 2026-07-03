@@ -1,0 +1,76 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo docker image prune --all --force
+          df -h /
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@v16
+
+      # The repart image builder fakes root inside the Nix sandbox with
+      # `unshare --map-root-user`. Ubuntu 24.04 runners block unprivileged user
+      # namespaces via AppArmor, which fails that nested unshare
+      # ("write failed /proc/self/uid_map: Operation not permitted").
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Build ISO
+        run: nix build ./os#iso -L
+
+      - name: Prepare release assets
+        run: |
+          mkdir release
+          iso="$(echo result/iso/*.iso)"
+          split -b 1900M -d -a 1 "$iso" release/mfd-kiosk-flasher.iso.part
+          ( cd release && sha256sum mfd-kiosk-flasher.iso.part* > SHA256SUMS )
+          sha256sum "$iso" | awk '{print $1 "  mfd-kiosk-flasher.iso"}' >> release/SHA256SUMS
+
+      - name: Create GitHub release
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes="$(cat <<'EOF'
+          ## Reassembling the ISO
+
+          The flasher ISO is split into parts because GitHub limits each release asset to 2 GiB.
+          Download every `mfd-kiosk-flasher.iso.part*` file plus `SHA256SUMS`, then reassemble:
+
+          - Linux/macOS: `cat mfd-kiosk-flasher.iso.part* > mfd-kiosk-flasher.iso`
+          - Windows: `copy /b mfd-kiosk-flasher.iso.part0+mfd-kiosk-flasher.iso.part1 mfd-kiosk-flasher.iso`
+
+          Verify the download and the reassembled image:
+
+          - `sha256sum -c SHA256SUMS`
+          EOF
+          )"
+          gh release create "${GITHUB_REF_NAME}" release/* \
+            --title "${GITHUB_REF_NAME}" \
+            --generate-notes \
+            --notes "${notes}"
+
+      - name: Upload artifact
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: mfd-kiosk-flasher
+          path: release/
+          retention-days: 7
+          compression-level: 0
