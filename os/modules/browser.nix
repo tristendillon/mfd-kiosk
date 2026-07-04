@@ -111,12 +111,49 @@ let
     user_pref("browser.tabs.animate", false);
     user_pref("browser.fullscreen.animate", false);
 
+    // --- Kiosk: hide the mouse cursor. Enables chrome/userContent.css (a
+    // user-origin sheet whose `cursor: none !important` beats page-set
+    // `cursor: pointer`); the sheet is installed by the launcher below. ---
+    user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);
+
     // --- VM / vmwgfx GPU fallbacks (RESERVE — uncomment only if the dashboard
     // renders blank/garbled in VMware; these force Firefox onto safer,
     // software/no-dmabuf rendering paths for the vmwgfx driver). ---
     // user_pref("gfx.webrender.software", true);
     // user_pref("widget.dmabuf.force-enabled", false);
     // user_pref("media.ffmpeg.vaapi.enabled", false);
+  '';
+
+  # Global "no cursor" sheet for ALL web content. Installed into the ephemeral
+  # profile's chrome/ dir each launch, mirroring how user.js is installed.
+  # userContent.css is user-origin, so `!important` here beats any author-set
+  # cursor:pointer on links/buttons and the text I-beam over inputs.
+  userContentCss = pkgs.writeText "mfd-firefox-userContent.css" ''
+    *, *::before, *::after { cursor: none !important; }
+  '';
+
+  # Fully-transparent XCursor theme. wlroots/cage draws a default cursor at
+  # startup (before Firefox paints) and during the crash-restart gap — cases
+  # userContent.css can't reach. Point cage at this so its own cursor is
+  # invisible too. Build-time deps only; only the tiny cursor files ship.
+  transparentCursor = pkgs.runCommand "mfd-transparent-cursor" {
+    nativeBuildInputs = [ pkgs.xcursorgen pkgs.imagemagick ];
+  } ''
+    mkdir -p "$out/share/icons/mfd-blank/cursors"
+    magick -size 32x32 xc:transparent blank.png   # >= nominal size or xcursorgen errors
+    printf '32 0 0 blank.png\n' > blank.conf       # <size> <xhot> <yhot> <file>
+    xcursorgen blank.conf "$out/share/icons/mfd-blank/cursors/left_ptr"
+    cd "$out/share/icons/mfd-blank/cursors"
+    for n in default arrow top_left_arrow pointer hand hand1 hand2 \
+             xterm text ibeam crosshair watch wait progress \
+             grab grabbing move all-scroll not-allowed help question_arrow \
+             context-menu n-resize s-resize e-resize w-resize \
+             ne-resize nw-resize se-resize sw-resize ns-resize ew-resize \
+             nesw-resize nwse-resize col-resize row-resize; do
+      [ -e "$n" ] || ln -s left_ptr "$n"
+    done
+    printf '[Icon Theme]\nName=mfd-blank\nComment=Transparent kiosk cursor\n' \
+      > "$out/share/icons/mfd-blank/index.theme"
   '';
 
   # firefox's URL carries the per-device token, which is NOT known at build time,
@@ -148,6 +185,7 @@ let
     rm -rf "$PROFILE"
     mkdir -p "$PROFILE"
     install -m 644 ${userJs} "$PROFILE/user.js"
+    install -D -m 644 ${userContentCss} "$PROFILE/chrome/userContent.css"
 
     exec ${kioskFirefox}/bin/firefox-esr ${lib.escapeShellArgs cfg.extraFirefoxArgs} \
       --profile "$PROFILE" --kiosk "$KIOSK_URL"
@@ -160,6 +198,20 @@ in
     enable = true;
     user = cfg.kioskUser;
     program = launcher;
+  };
+
+  # cage/wlroots draws its OWN default cursor (at startup before Firefox paints,
+  # and during the crash-restart gap) — the launcher's env can't reach it since
+  # the launcher IS cage's `program` (its exports land in Firefox, not cage).
+  # Point cage at a fully-transparent XCursor theme so that cursor is invisible
+  # too. XCURSOR_PATH is the dir CONTAINING the theme dir.
+  services.cage.environment = {
+    XCURSOR_THEME = "mfd-blank";
+    XCURSOR_PATH  = "${transparentCursor}/share/icons";
+    XCURSOR_SIZE  = "32";
+    # vmwgfx escape hatch: if the VMware HW cursor plane ignores the transparent
+    # theme, uncomment to force wlroots onto software cursors (which honor it).
+    # WLR_NO_HARDWARE_CURSORS = "1";
   };
 
   # No token -> no browser -> blank tty1. Must be a LIST: the cage module sets
