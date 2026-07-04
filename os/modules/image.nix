@@ -37,6 +37,16 @@
           # The Unified Kernel Image systemd-boot auto-discovers.
           "/EFI/Linux/${config.boot.uki.name}.efi".source =
             "${config.system.build.uki}/${config.boot.uki.name}.efi";
+          # Without a loader.conf, systemd-boot shows its menu and waits — and on
+          # firmware that advertises OsIndications (real HP ProDesk hardware, not
+          # most VMs) it auto-adds a "Reboot Into Firmware Interface" entry, so the
+          # box stops at a two-item boot menu every reboot. `timeout 0` boots the
+          # (single) UKI immediately; `editor no` locks out kernel cmdline editing
+          # at the console — appropriate for an unattended kiosk.
+          "/loader/loader.conf".source = pkgs.writeText "mfd-kiosk-loader.conf" ''
+            timeout 0
+            editor no
+          '';
         };
         repartConfig = {
           Type = "esp";

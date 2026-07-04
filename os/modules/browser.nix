@@ -190,6 +190,15 @@ in
   systemd.services."getty@tty1".enable = false;
   systemd.services."autovt@tty1".enable = false;
 
+  # Don't race the network: on a fast reboot cage would otherwise launch firefox
+  # before DHCP finishes, loading the dashboard URL while offline (blank/error
+  # page with no auto-retry). Order after network-online.target so the browser
+  # opens only once a link is up. `wants` (not `requires`) means a genuinely
+  # offline box still launches after wait-online's 30s timeout rather than
+  # staying blank forever.
+  systemd.services."cage-tty1".after = [ "network-online.target" ];
+  systemd.services."cage-tty1".wants = [ "network-online.target" ];
+
   # Crash -> restart. cage names the unit after the tty, so it stays `cage-tty1`
   # regardless of which program it runs. NOTE: confirm on first boot with
   # `systemctl status cage-tty1`.
