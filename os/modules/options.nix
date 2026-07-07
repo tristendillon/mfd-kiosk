@@ -59,6 +59,19 @@
       description = "Runtime file holding KIOSK_URL; outside the Nix store.";
     };
 
+    debug = lib.mkOption {
+      type = lib.types.bool;
+      default = false;
+      description = ''
+        Diagnostic build toggle for bring-up on new/unsupported boards (e.g. the
+        Cherry Trail Intel Compute Stick). When true: the boot is un-quieted
+        (loglevel=7, verbose systemd status) and an autologin technician shell is
+        placed on tty1 — the screen you're already looking at — so you can read
+        the boot and get a shell WITHOUT a working VT-switch, USB keyboard, or a
+        dashboard token. Leave false for production images. See modules/debug.nix.
+      '';
+    };
+
     extraFirefoxArgs = lib.mkOption {
       type = lib.types.listOf lib.types.str;
       default = [ ];

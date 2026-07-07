@@ -69,6 +69,29 @@ nix build ./os#image
 # -> result/mfd-kiosk_*.raw.zst
 ```
 
+### Diagnostic (debug) build for board bring-up
+
+When a board won't come up (blank screen, no SSH, `Ctrl+Alt+F2` dead — common on
+quirky hardware like the Cherry Trail Intel Compute Stick), build the **debug**
+variant. It flips `mfd.kiosk.debug` on (see `os/modules/debug.nix`): the boot is
+un-quieted and a **passwordless `technician` autologin shell is placed on tty1**
+— the screen already in front of you — so you can read the boot and inspect the
+box (`journalctl -b`, `ip a`, `systemctl status cage-tty1`) with no working
+VT-switch, USB keyboard, or dashboard token required.
+
+```sh
+nix run   ./os#isoDebug     # -> ./dist/mfd-kiosk-flasher-debug.iso
+nix build ./os#imageDebug   # or just the bare debug disk image
+```
+
+CI also builds it on demand: run the **Release** workflow via *workflow_dispatch*
+and download the `mfd-kiosk-flasher-debug` artifact.
+
+> **Do not deploy the debug image to production or publish it.** Anyone with
+> physical access gets a root-capable shell with no password and no token. It is
+> never attached to a tagged public release for this reason. Once the board is
+> diagnosed, flash the normal production ISO.
+
 ## What the build produces
 
 The kiosk image is a **UEFI-only** GPT disk image:

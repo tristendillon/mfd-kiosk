@@ -1,4 +1,4 @@
-{ self, pkgs, lib, modulesPath, ... }:
+{ self, pkgs, lib, modulesPath, kioskAttr ? "kiosk", ... }:
 
 # USB installer live environment. Boots straight into an interactive wizard on
 # tty1 (no login, no command to type) that collects the per-device identity
@@ -10,7 +10,11 @@
 # stamps the identity onto the flashed root partition for the image to pick up
 # on first boot (see identity.nix / user.nix / ssh.nix).
 let
-  kiosk = self.nixosConfigurations.kiosk.config;
+  # Which kiosk image this flasher carries: "kiosk" (production) or "kioskDebug"
+  # (the diagnostic variant). Passed from flake.nix via specialArgs so one
+  # flasher.nix builds both ISOs. See mkFlasher there.
+  isDebug = kioskAttr != "kiosk";
+  kiosk = self.nixosConfigurations.${kioskAttr}.config;
   # The finished kiosk disk image (a dir containing mfd-kiosk_<ver>.raw.zst),
   # built without qemu via systemd-repart. See image.nix.
   kioskImage = kiosk.system.build.image;
@@ -402,7 +406,7 @@ in
     "${modulesPath}/installer/cd-dvd/installation-cd-minimal.nix"
   ];
 
-  image.fileName = lib.mkForce "mfd-kiosk-flasher.iso";
+  image.fileName = lib.mkForce "mfd-kiosk-flasher${lib.optionalString isDebug "-debug"}.iso";
 
   nix.settings.experimental-features = [ "nix-command" "flakes" ];
   networking.hostName = "mfd-flasher";

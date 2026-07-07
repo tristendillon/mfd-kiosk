@@ -7,6 +7,7 @@
     ../../modules/image.nix
     ../../modules/minimal.nix
     ../../modules/browser.nix
+    ../../modules/debug.nix
     ../../modules/user.nix
     ../../modules/ssh.nix
     ../../modules/slim.nix

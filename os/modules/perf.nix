@@ -1,14 +1,25 @@
-{ lib, ... }:
+{ config, lib, ... }:
 
 # Small, reversible performance/wear tuning for the display appliance. Every
 # knob here is low-risk and aimed at one of three goals: a quieter/cleaner boot
 # console, snappier map/dashboard rendering, or fewer writes to the eMMC/SSD so
 # the flash lasts. The box reboots daily, so shutdown/boot speed matters too.
+let
+  debug = config.mfd.kiosk.debug;
+in
 {
+  boot.kernelParams = [
+    # Cherry Trail / Bay Trail Atom SoCs (e.g. the Intel Compute Stick) hard-hang
+    # in deep C-states — the classic, widely-cited "Atom random freeze". Capping
+    # C-states is the standard cure. No-op on N100/AMD/VMware (they either don't
+    # expose these C-states or ignore the param), so it's safe fleet-wide.
+    "intel_idle.max_cstate=1"
+  ]
   # Quieter, cleaner boot console (visible in VMware). Drop kernel/udev chatter
   # to warnings+; systemd.show_status=auto shows unit status only when something
-  # is slow or fails, so a healthy boot stays tidy.
-  boot.kernelParams = [
+  # is slow or fails, so a healthy boot stays tidy. Suppressed in debug mode
+  # (debug.nix) so bring-up on a new board can actually read the boot.
+  ++ lib.optionals (!debug) [
     "quiet"
     "loglevel=3"
     "udev.log_level=3"

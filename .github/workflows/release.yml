@@ -34,6 +34,15 @@ jobs:
       - name: Build ISO
         run: nix build ./os#iso -L
 
+      # Diagnostic flasher (un-quiet boot + passwordless technician autologin on
+      # tty1) for board bring-up. Built ONLY on a manual workflow_dispatch and
+      # uploaded as a short-retention artifact — never attached to a public
+      # tagged release, since anyone with physical access to it gets a
+      # root-capable shell with no token and no password.
+      - name: Build debug ISO
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: nix build ./os#isoDebug -L -o result-debug
+
       - name: Prepare release assets
         run: |
           mkdir release
@@ -72,5 +81,25 @@ jobs:
         with:
           name: mfd-kiosk-flasher
           path: release/
+          retention-days: 7
+          compression-level: 0
+
+      # The debug ISO goes ONLY to a workflow_dispatch artifact — no release
+      # asset, no 2 GiB split needed (artifacts allow large files). Grab it from
+      # the run's Artifacts, flash, and diagnose; see docs/building.md.
+      - name: Prepare debug asset
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          mkdir release-debug
+          iso="$(echo result-debug/iso/*.iso)"
+          cp -L "$iso" release-debug/mfd-kiosk-flasher-debug.iso
+          ( cd release-debug && sha256sum mfd-kiosk-flasher-debug.iso > SHA256SUMS )
+
+      - name: Upload debug artifact
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: mfd-kiosk-flasher-debug
+          path: release-debug/
           retention-days: 7
           compression-level: 0
