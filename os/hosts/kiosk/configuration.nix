@@ -27,7 +27,7 @@
   mfd.kiosk = {
     # DEFAULT dashboard base URL offered by the install wizard; the effective
     # per-device value is entered there and stored in /var/lib/mfd/base-url.
-    baseUrl = "https://mfd.alertdashboard.com";
+    baseUrl = "https://mfdalertdashboard.com";
 
     # Optional fleet-wide recovery key(s). Per-device credentials (technician
     # password + SSH keys) are collected by the install wizard instead.

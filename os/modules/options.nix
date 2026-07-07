@@ -4,7 +4,7 @@
   options.mfd.kiosk = {
     baseUrl = lib.mkOption {
       type = lib.types.str;
-      example = "https://mfd.alertdashboard.com";
+      example = "https://mfdalertdashboard.com";
       description = ''
         DEFAULT base dashboard URL offered by the install wizard. The effective
         per-device value lives in ''${stateDir}/base-url (written by the wizard,

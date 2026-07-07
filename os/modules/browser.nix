@@ -7,6 +7,12 @@
 let
   cfg = config.mfd.kiosk;
 
+  # Persistent (survives reboots — the ext4 root is not tmpfs) store for the one
+  # bit of Firefox profile state we DO want to keep: per-site zoom. Everything
+  # else in the profile stays throwaway. Owned by the kiosk user so Firefox can
+  # write to it; see the symlink in the launcher and the tmpfiles rule below.
+  zoomStateDir = "/var/lib/mfd-kiosk/firefox";
+
   # Enterprise policy baked INTO the package via the firefox wrapper
   # (lib/firefox/distribution/policies.json). Self-contained, store-path pinned,
   # no /etc file and no programs.firefox module. Only the lightweight wrapper
@@ -187,6 +193,17 @@ let
     install -m 644 ${userJs} "$PROFILE/user.js"
     install -D -m 644 ${userContentCss} "$PROFILE/chrome/userContent.css"
 
+    # --- Persist per-site zoom across reboots. The profile is a throwaway (wiped
+    # just above), but some TVs/kiosks scale badly and render the dashboard tiny;
+    # a technician zooms in once (Ctrl-+) and expects it to stick. Firefox stores
+    # full-page zoom per host in content-prefs.sqlite, so we symlink JUST that
+    # one file to a persistent, kiosk-owned dir — nothing else in the profile
+    # persists. SQLite resolves the symlink, so its -wal/-shm land in the
+    # persistent dir too and a zoom survives even a hard power-cut. Zoom is keyed
+    # by host (browser.zoom.siteSpecific, on by default), so it applies no matter
+    # which per-device token is appended to the URL path.
+    ln -sf "${zoomStateDir}/content-prefs.sqlite" "$PROFILE/content-prefs.sqlite"
+
     exec ${kioskFirefox}/bin/firefox-esr ${lib.escapeShellArgs cfg.extraFirefoxArgs} \
       --profile "$PROFILE" --kiosk "$KIOSK_URL"
   '';
@@ -199,6 +216,14 @@ in
     user = cfg.kioskUser;
     program = launcher;
   };
+
+  # Persistent, kiosk-owned home for content-prefs.sqlite (per-site zoom). Must
+  # exist and be writable by the kiosk user before cage launches Firefox; the
+  # launcher symlinks the throwaway profile's content-prefs.sqlite in here.
+  # 0700: only the kiosk user needs it. tmpfiles creates the parent as needed.
+  systemd.tmpfiles.rules = [
+    "d ${zoomStateDir} 0700 ${cfg.kioskUser} ${cfg.kioskUser} -"
+  ];
 
   # cage/wlroots draws its OWN default cursor (at startup before Firefox paints,
   # and during the crash-restart gap) — the launcher's env can't reach it since
