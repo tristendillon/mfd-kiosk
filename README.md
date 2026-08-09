@@ -106,14 +106,3 @@ time, not in the flake — one image serves the whole fleet.
 Connectivity is wired ethernet by default; the wizard can also collect an
 optional per-device WPA2 Wi-Fi network (ethernet is preferred when both are up).
 Details in [docs/installing.md](docs/installing.md).
-
-## Day-2
-
-- **Update = re-flash.** Rebuild the ISO and re-run the installer; there is no
-  on-device `nixos-rebuild`.
-- Set or rotate the dashboard token any time: SSH in as `technician`, run
-  `sudo mfd-set-token`.
-- The token lives only in `/etc/mfd-kiosk/kiosk.env` (root:kiosk 0640) — never
-  in git or the Nix store.
-- Browser crashes auto-restart; the box reboots itself daily at
-  `rebootTime`.
