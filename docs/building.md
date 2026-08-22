@@ -1,8 +1,9 @@
 # Building from source
 
-How to build the flasher ISO (and the bare kiosk disk image) from this repo.
+How to build the flasher — as a raw GPT USB image or an ISO — and the bare
+kiosk disk image from this repo.
 
-> Most users don't need this: prebuilt flasher ISOs are published on the repo's
+> Most users don't need this: prebuilt flashers are published on the repo's
 > Releases page — see [Getting the flasher](../README.md#getting-the-flasher).
 > Build from source when you're developing, or when you need to change the
 > baked-in defaults or recovery keys (`mfd.kiosk.baseUrl` and friends).
@@ -43,22 +44,24 @@ dashboard base URL, optional Wi-Fi credentials, technician password, per-device
 SSH keys) is collected by the install wizard at flash time and stamped onto the
 target disk (see [installing.md](installing.md)).
 
-## Build the flasher ISO
+## Build the flasher
 
 Run from the **repo root**:
 
 ```sh
-nix run ./os#iso
-# -> ./dist/mfd-kiosk-flasher.iso   (git-ignored, ~3 GB)
+nix run ./os#usb    # -> ./dist/mfd-kiosk-flasher-usb.img  (raw GPT USB image; physical hardware)
+nix run ./os#iso    # -> ./dist/mfd-kiosk-flasher.iso      (hybrid ISO; VMs / optical)
 ```
 
-Use `nix run` (not `nix build`) here on purpose: a plain `nix build` only
-leaves a read-only `/nix/store` symlink, while the app copies a real,
-transferable file into `./dist/` and fails loudly if the copy is truncated
-(e.g. disk full) — a short ISO otherwise boots into a confusing Stage-1 error.
+Both are git-ignored, ~3 GB, and carry the same installer — pick by target
+firmware (see [flashing-usb.md](flashing-usb.md#which-artifact)). Use `nix run`
+(not `nix build`) here on purpose: a plain `nix build` only leaves a read-only
+`/nix/store` symlink (compressed, in the `.img`'s case), while the app copies a
+real, flash-ready file into `./dist/` and fails loudly on truncation (e.g.
+disk full) — a short image otherwise boots into a confusing Stage-1 error.
 
-The ISO carries the finished, compressed kiosk disk image as a plain file (plus
-a sha256), so the flasher never builds anything on the target machine.
+Both media carry the finished, compressed kiosk disk image as a plain file
+(plus a sha256), so the flasher never builds anything on the target machine.
 
 ### Just the bare disk image
 
@@ -80,6 +83,7 @@ box (`journalctl -b`, `ip a`, `systemctl status cage-tty1`) with no working
 VT-switch, USB keyboard, or dashboard token required.
 
 ```sh
+nix run   ./os#usbDebug     # -> ./dist/mfd-kiosk-flasher-usb-debug.img
 nix run   ./os#isoDebug     # -> ./dist/mfd-kiosk-flasher-debug.iso
 nix build ./os#imageDebug   # or just the bare debug disk image
 ```
@@ -116,9 +120,9 @@ nix eval ./os#nixosConfigurations.kiosk.config.system.build.toplevel.drvPath
 Both catch Nix-level mistakes in seconds; only boot-level behavior needs a VM
 (see [testing-vmware.md](testing-vmware.md)).
 
-## Getting the ISO out of the dev container / WSL
+## Getting the image out of the dev container / WSL
 
-- **VS Code dev container:** right-click `dist/mfd-kiosk-flasher.iso` in the
+- **VS Code dev container:** right-click the file under `dist/` in the
   Explorer → **Download**.
 - **WSL2:** copy from `\\wsl.localhost\<distro>\<path-to-repo>\dist\` in
   Windows Explorer.

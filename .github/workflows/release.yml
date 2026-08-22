@@ -34,14 +34,24 @@ jobs:
       - name: Build ISO
         run: nix build ./os#iso -L
 
-      # Diagnostic flasher (un-quiet boot + passwordless technician autologin on
-      # tty1) for board bring-up. Built ONLY on a manual workflow_dispatch and
-      # uploaded as a short-retention artifact — never attached to a public
-      # tagged release, since anyone with physical access to it gets a
+      # Raw GPT USB image (FAT32 ESP + ext4 root) for UEFI firmware that
+      # refuses the isohybrid ISO layout (e.g. MeLE PCG02). Shares the kiosk
+      # image build with the ISO, so the extra cost is just the flasher rootfs.
+      - name: Build USB image
+        run: nix build ./os#usbImage -L -o result-usb
+
+      # Diagnostic flashers (un-quiet boot + passwordless technician autologin
+      # on tty1) for board bring-up. Built ONLY on a manual workflow_dispatch
+      # and uploaded as a short-retention artifact — never attached to a public
+      # tagged release, since anyone with physical access to them gets a
       # root-capable shell with no token and no password.
       - name: Build debug ISO
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: nix build ./os#isoDebug -L -o result-debug
+
+      - name: Build debug USB image
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: nix build ./os#usbImageDebug -L -o result-usb-debug
 
       - name: Prepare release assets
         run: |
@@ -50,6 +60,15 @@ jobs:
           split -b 1900M -d -a 1 "$iso" release/mfd-kiosk-flasher.iso.part
           ( cd release && sha256sum mfd-kiosk-flasher.iso.part* > SHA256SUMS )
           sha256sum "$iso" | awk '{print $1 "  mfd-kiosk-flasher.iso"}' >> release/SHA256SUMS
+          # The USB image is built zstd-compressed; publish it as a plain .img
+          # (Etcher can't open .zst, Rufus support for it is spotty). Stream
+          # the decompression straight into split parts so the whole multi-GB
+          # image is never materialized on the runner's disk.
+          img="$(echo result-usb/*.raw.zst)"
+          zstd -dc "$img" | split -b 1900M -d -a 1 - release/mfd-kiosk-flasher-usb.img.part
+          ( cd release && sha256sum mfd-kiosk-flasher-usb.img.part* >> SHA256SUMS )
+          cat release/mfd-kiosk-flasher-usb.img.part* \
+            | sha256sum | awk '{print $1 "  mfd-kiosk-flasher-usb.img"}' >> release/SHA256SUMS
 
       - name: Create GitHub release
         if: ${{ startsWith(github.ref, 'refs/tags/') }}
@@ -57,15 +76,28 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           notes="$(cat <<'EOF'
-          ## Reassembling the ISO
+          ## Which file do I want?
 
-          The flasher ISO is split into parts because GitHub limits each release asset to 2 GiB.
-          Download every `mfd-kiosk-flasher.iso.part*` file plus `SHA256SUMS`, then reassemble:
+          - **`mfd-kiosk-flasher-usb.img`** — recommended for physical hardware. A real GPT disk
+            image (FAT32 EFI System Partition + root); write it byte-for-byte with Rufus (DD mode),
+            balenaEtcher, or `dd`. Some UEFI firmwares (e.g. the MeLE PCG02's Aptio) refuse the
+            isohybrid ISO layout — this image is what they boot.
+          - **`mfd-kiosk-flasher.iso`** — for VMs (attach as a CD) and optical media.
+
+          ## Reassembling the images
+
+          Both artifacts are split into parts because GitHub limits each release asset to 2 GiB.
+          Download every part of the artifact you want plus `SHA256SUMS`, then reassemble:
 
           - Linux/macOS: `cat mfd-kiosk-flasher.iso.part* > mfd-kiosk-flasher.iso`
           - Windows: `copy /b mfd-kiosk-flasher.iso.part0+mfd-kiosk-flasher.iso.part1 mfd-kiosk-flasher.iso`
 
-          Verify the download and the reassembled image:
+          Same pattern for the USB image:
+
+          - Linux/macOS: `cat mfd-kiosk-flasher-usb.img.part* > mfd-kiosk-flasher-usb.img`
+          - Windows: `copy /b mfd-kiosk-flasher-usb.img.part0+mfd-kiosk-flasher-usb.img.part1 mfd-kiosk-flasher-usb.img`
+
+          Verify the downloads and the reassembled images:
 
           - `sha256sum -c SHA256SUMS`
           EOF
@@ -84,16 +116,18 @@ jobs:
           retention-days: 7
           compression-level: 0
 
-      # The debug ISO goes ONLY to a workflow_dispatch artifact — no release
-      # asset, no 2 GiB split needed (artifacts allow large files). Grab it from
-      # the run's Artifacts, flash, and diagnose; see docs/building.md.
+      # The debug flashers go ONLY to a workflow_dispatch artifact — no release
+      # asset, no 2 GiB split needed (artifacts allow large files). Grab them
+      # from the run's Artifacts, flash, and diagnose; see docs/building.md.
       - name: Prepare debug asset
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
           mkdir release-debug
           iso="$(echo result-debug/iso/*.iso)"
           cp -L "$iso" release-debug/mfd-kiosk-flasher-debug.iso
-          ( cd release-debug && sha256sum mfd-kiosk-flasher-debug.iso > SHA256SUMS )
+          img="$(echo result-usb-debug/*.raw.zst)"
+          zstd -dc "$img" > release-debug/mfd-kiosk-flasher-usb-debug.img
+          ( cd release-debug && sha256sum mfd-kiosk-flasher-debug.iso mfd-kiosk-flasher-usb-debug.img > SHA256SUMS )
 
       - name: Upload debug artifact
         if: ${{ github.event_name == 'workflow_dispatch' }}

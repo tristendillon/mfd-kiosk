@@ -44,6 +44,33 @@ technician runs on a board.
 6. **Verify:** the dashboard renders fullscreen. `systemctl status cage-tty1`
    should show the browser running with `Restart=always`.
 
+## Testing the raw USB image (`.img`) in a VM
+
+The flow above uses the ISO as a virtual CD — the easiest path. To exercise the
+`mfd-kiosk-flasher-usb.img` itself (the artifact recommended for physical
+hardware), attach it as a **second disk** instead of a CD:
+
+- **VMware:** convert to VMDK and add it as an existing disk, then pick it in
+  the firmware boot menu (Esc at the VMware logo):
+
+  ```sh
+  qemu-img convert -f raw -O vmdk dist/mfd-kiosk-flasher-usb.img flasher.vmdk
+  ```
+
+- **qemu (works in the dev container, no VMware needed):**
+
+  ```sh
+  qemu-img create -f qcow2 target.qcow2 8G
+  qemu-system-x86_64 -m 2048 -machine q35 \
+    -drive if=pflash,format=raw,readonly=on,file=/path/to/OVMF_CODE.fd \
+    -drive file=dist/mfd-kiosk-flasher-usb.img,format=raw \
+    -drive file=target.qcow2
+  ```
+
+On the image's first boot it grows its own root partition to fill the virtual
+disk before the wizard appears — normal. After flashing, power off and detach
+the flasher disk before rebooting (the "remove the USB stick" step).
+
 ## Troubleshooting
 
 | Symptom | Cause / fix |

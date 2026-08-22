@@ -14,36 +14,43 @@ image.
 
 ## Getting the flasher
 
-Grab a prebuilt ISO from the repo's **[Releases](../../releases)** page — no
-Nix, no build. Because the ISO is ~3 GB and GitHub caps release assets at 2 GiB,
-it is published **split** into `mfd-kiosk-flasher.iso.part0`,
-`mfd-kiosk-flasher.iso.part1`, … alongside a `SHA256SUMS`. Download every part
-plus `SHA256SUMS`, then reassemble:
+Grab a prebuilt flasher from the repo's **[Releases](../../releases)** page —
+no Nix, no build. Two artifacts are published:
+
+| Artifact | Use it for |
+|---|---|
+| `mfd-kiosk-flasher-usb.img` | **Physical hardware (recommended).** A real GPT disk image (FAT32 EFI System Partition + root) written byte-for-byte to the stick. Some UEFI firmwares — e.g. the MeLE PCG02's Aptio — refuse the isohybrid ISO layout; this image is what they boot. |
+| `mfd-kiosk-flasher.iso` | VMs (attach as a CD) and optical media. Also boots as USB on most, but not all, firmware. |
+
+Both are ~3 GB and GitHub caps release assets at 2 GiB, so each is published
+**split** into `.part0`, `.part1`, … alongside a `SHA256SUMS`. Download every
+part of the artifact you want plus `SHA256SUMS`, then reassemble (same pattern
+for the `.iso`):
 
 ```sh
 # Linux / macOS
-cat mfd-kiosk-flasher.iso.part* > mfd-kiosk-flasher.iso
+cat mfd-kiosk-flasher-usb.img.part* > mfd-kiosk-flasher-usb.img
 ```
 
 ```bat
 :: Windows (cmd)
-copy /b mfd-kiosk-flasher.iso.part0+mfd-kiosk-flasher.iso.part1 mfd-kiosk-flasher.iso
+copy /b mfd-kiosk-flasher-usb.img.part0+mfd-kiosk-flasher-usb.img.part1 mfd-kiosk-flasher-usb.img
 ```
 
 Verify before flashing:
 
 ```sh
-sha256sum -c SHA256SUMS            # Linux / macOS (checks parts + whole ISO)
+sha256sum -c SHA256SUMS            # Linux / macOS (checks parts + whole images)
 ```
 
 ```bat
-:: Windows — compare against the mfd-kiosk-flasher.iso line in SHA256SUMS
-certutil -hashfile mfd-kiosk-flasher.iso SHA256
+:: Windows — compare against the matching line in SHA256SUMS
+certutil -hashfile mfd-kiosk-flasher-usb.img SHA256
 ```
 
 Then continue at [docs/flashing-usb.md](docs/flashing-usb.md).
 
-> Release ISOs are **fleet-generic** — per-device and per-site settings
+> Release flashers are **fleet-generic** — per-device and per-site settings
 > (hostname, dashboard URL, credentials) are collected by the install wizard,
 > not baked in. **Building from source**
 > ([docs/building.md](docs/building.md)) is the secondary path — for
@@ -54,9 +61,10 @@ release pipeline work.
 
 ## From zero to a running kiosk
 
-1. **Get** the flasher ISO — download a [release](#getting-the-flasher), or
-   build from source ([docs/building.md](docs/building.md))
-2. **Write** it to a USB stick with Etcher or Rufus —
+1. **Get** the flasher — download a [release](#getting-the-flasher) (the
+   `-usb.img` for real hardware, the `.iso` for VMs), or build from source
+   ([docs/building.md](docs/building.md))
+2. **Write** it to a USB stick with Etcher, Rufus, or `dd` —
    [docs/flashing-usb.md](docs/flashing-usb.md)
 3. **Install** on the device: boot the stick, answer the wizard, set the
    dashboard token — [docs/installing.md](docs/installing.md)
@@ -75,9 +83,9 @@ nixpkgs:
 flake.nix              # DEV environment (nixos-unstable); what direnv loads
 .devcontainer/         # VS Code dev container (Debian + single-user Nix)
 os/                    # the APPLIANCE flake (pinned nixos-26.05)
-  flake.nix            #   nixosConfigurations.{kiosk,flasherIso}; `nix run ./os#iso`, `.#image`
+  flake.nix            #   nixosConfigurations.{kiosk,flasherIso,flasherUsb}; `nix run ./os#iso`, `.#usb`, `.#image`
   hosts/kiosk/         #   configuration.nix (site config), hardware.nix (generic HW profile)
-  modules/             #   image (repart disk image), flasher (USB installer + wizard),
+  modules/             #   image (repart disk image), flasher-common/-iso/-usb (installer + wizard),
                        #   browser (cage + firefox-esr), identity (per-device state),
                        #   user, ssh, secrets (token), maintenance, minimal, slim, options
 docs/                  # build / flash / install / VM-test guides
@@ -85,7 +93,7 @@ docs/                  # build / flash / install / VM-test guides
 
 ## Configuration
 
-Release ISOs are fleet-generic: the image needs no per-site editing before
+Release flashers are fleet-generic: the image needs no per-site editing before
 building. A few defaults still live in `os/hosts/kiosk/configuration.nix`:
 
 - `mfd.kiosk.baseUrl` — the default dashboard base URL the wizard offers

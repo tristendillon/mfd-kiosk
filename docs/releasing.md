@@ -1,7 +1,7 @@
 # Releasing (maintainers)
 
-How CI validates the flake and how the GitHub Actions pipeline publishes a
-flasher ISO as a GitHub Release.
+How CI validates the flake and how the GitHub Actions pipeline publishes the
+flasher (ISO + raw GPT USB image) as a GitHub Release.
 
 ## CI on every push and PR
 
@@ -29,15 +29,19 @@ git push origin v0.1.0
 Pushing a `v*` tag triggers `.github/workflows/release.yml`, which on
 `ubuntu-latest`:
 
-1. **Frees runner disk** to make room for the ~3 GB image.
-2. **Installs Nix** and runs `nix build ./os#iso`.
-3. **Splits the ISO** into parts under 2 GiB
-   (`mfd-kiosk-flasher.iso.part0`, `.part1`, …). GitHub caps each release asset
-   at **2 GiB** and the ISO is larger, so it cannot be uploaded whole.
-4. **Writes `SHA256SUMS`** covering both the parts and the reassembled whole
-   ISO.
-5. **Creates the GitHub Release** with generated notes plus reassembly and
-   verification instructions (the same steps users follow in
+1. **Frees runner disk** to make room for the ~3 GB images.
+2. **Installs Nix** and runs `nix build ./os#iso` plus `nix build
+   ./os#usbImage` (the raw GPT USB image; built zstd-compressed and
+   stream-decompressed during asset prep — Etcher/Rufus can't flash `.zst`
+   directly).
+3. **Splits both artifacts** into parts under 2 GiB
+   (`mfd-kiosk-flasher.iso.part0`, `mfd-kiosk-flasher-usb.img.part0`, …).
+   GitHub caps each release asset at **2 GiB** and both are larger, so neither
+   can be uploaded whole.
+4. **Writes `SHA256SUMS`** covering the parts and the reassembled whole
+   ISO/`.img`.
+5. **Creates the GitHub Release** with generated notes plus artifact-picking,
+   reassembly and verification instructions (the same steps users follow in
    [Getting the flasher](../README.md#getting-the-flasher)) in the body, and
    uploads the parts and `SHA256SUMS` as assets.
 

@@ -1,44 +1,56 @@
-{ self, pkgs, lib, modulesPath, kioskAttr ? "kiosk", ... }:
+{ self, config, pkgs, lib, kioskAttr ? "kiosk", ... }:
 
-# USB installer live environment. Boots straight into an interactive wizard on
-# tty1 (no login, no command to type) that collects the per-device identity
-# (hostname, dashboard base URL, optional Wi-Fi credentials — validated live
-# against real hardware before they're accepted, technician
-# password, optional SSH keys), streams the prebuilt
+# Installer live environment shared by both flasher media — the hybrid ISO
+# (flasher-iso.nix) and the raw GPT USB image (flasher-usb.nix). Boots straight
+# into an interactive wizard on tty1 (no login, no command to type) that
+# collects the per-device identity (hostname, dashboard base URL, optional
+# Wi-Fi credentials — validated live against real hardware before they're
+# accepted, technician password, optional SSH keys), streams the prebuilt
 # compressed kiosk image onto the chosen internal disk with `zstd -dc | dd`
 # (copying bytes needs almost no RAM, so 2 GB boards provision fine), then
 # stamps the identity onto the flashed root partition for the image to pick up
 # on first boot (see identity.nix / user.nix / ssh.nix).
+#
+# Media differences are isolated behind two options:
+#   mfd.flasher.payloadDir     — where the payload lives at RUNTIME (a string,
+#                                never a store path — see the option comment)
+#   mfd.flasher.payloadPackage — the derivation each medium embeds at BUILD time
 let
   # Which kiosk image this flasher carries: "kiosk" (production) or "kioskDebug"
-  # (the diagnostic variant). Passed from flake.nix via specialArgs so one
-  # flasher.nix builds both ISOs. See mkFlasher there.
-  isDebug = kioskAttr != "kiosk";
+  # (the diagnostic variant). Passed from flake.nix via specialArgs so the same
+  # modules build all flasher variants. See mkFlasher there.
   kiosk = self.nixosConfigurations.${kioskAttr}.config;
   # The finished kiosk disk image (a dir containing mfd-kiosk_<ver>.raw.zst),
   # built without qemu via systemd-repart. See image.nix.
   kioskImage = kiosk.system.build.image;
 
-  # Interpolate the kiosk's own option values so ISO and image can't drift on
-  # paths/usernames.
+  # Interpolate the kiosk's own option values so flasher and image can't drift
+  # on paths/usernames.
   stateDir = kiosk.mfd.kiosk.stateDir;
   adminUser = kiosk.mfd.kiosk.adminUser;
   # Default dashboard base URL offered by the wizard; the effective per-device
   # value is stamped to ${stateDir}/base-url and read at token-set time.
   baseUrl = kiosk.mfd.kiosk.baseUrl;
 
-  # The image + a checksum under STABLE names, copied out so we can drop them
-  # onto the ISO9660 filesystem directly (see isoImage.contents below) instead
-  # of letting the multi-GB blob land inside nix-store.squashfs. Keeping the
-  # boot-critical store squashfs small (just the flasher's own closure) is what
-  # makes Stage 1 survive a truncated ISO — the store mount no longer has to read
-  # into the image tail. The checksum lets the wizard refuse a corrupt medium.
+  # The image + a checksum under STABLE names, copied out so each medium can
+  # carry them OUTSIDE the flasher's own store closure (isoImage.contents on
+  # the ISO, repart CopyFiles on the USB image) instead of letting the multi-GB
+  # blob land inside nix-store.squashfs / the store-bearing root fs. Keeping
+  # the boot-critical store small (just the flasher's own closure) is what
+  # makes Stage 1 survive a truncated medium — the store mount no longer has to
+  # read into the image tail. The checksum lets the wizard refuse a corrupt
+  # medium.
   kioskFlash = pkgs.runCommand "mfd-kiosk-flash" { } ''
     mkdir -p "$out"
     f=("${kioskImage}"/*.raw.zst)
     cp "''${f[0]}" "$out/mfd-kiosk.raw.zst"
     ( cd "$out" && sha256sum mfd-kiosk.raw.zst > mfd-kiosk.raw.zst.sha256 )
   '';
+
+  # Runtime location of the payload. A plain string on purpose: interpolating
+  # it into the wizard script must NOT create a store reference, or the payload
+  # would be dragged into the flasher's closure (and duplicated on the medium).
+  payloadDir = config.mfd.flasher.payloadDir;
 
   mfdInstall = pkgs.writeShellApplication {
     name = "mfd-install";
@@ -47,7 +59,7 @@ let
     runtimeInputs = with pkgs; [ util-linux coreutils gawk gnugrep zstd mkpasswd openssh systemd iwd ];
     text = ''
       #!/usr/bin/env bash
-      img="/iso/mfd-kiosk.raw.zst"
+      img="${payloadDir}/mfd-kiosk.raw.zst"
 
       # On failure, wait for an acknowledgement; the systemd unit has
       # Restart=always, so exiting redraws a fresh wizard on tty1.
@@ -72,6 +84,7 @@ let
       # MBR boot code — see image.nix). The flasher ISO itself is hybrid, so it
       # happily boots under legacy BIOS/CSM — and would then flash a disk this
       # firmware cannot boot ("Operating System not found"). Refuse up front.
+      # (The USB-image flasher is UEFI-only too, so this never trips there.)
       if [ ! -d /sys/firmware/efi ]; then
         die_pause "This machine booted in legacy BIOS mode, but the kiosk image only boots via UEFI.
 Enable UEFI boot (disable CSM/legacy) in the firmware setup and boot this installer again.
@@ -118,6 +131,12 @@ In VMware: VM Settings > Options > Advanced > Firmware type > UEFI."
       # `if`, and every wait has an explicit timeout so tty1 can't hang. The
       # passphrase is passed via --passphrase and never printed in any message.
       echo
+      # On the USB-image flasher /var/lib/iwd is persistent ext4 (the ISO's
+      # lives on the tmpfs live root), so an aborted earlier run — power cut
+      # between "connected" and "forget" — could leave a stale profile behind,
+      # and the success path below captures /var/lib/iwd/*.psk by glob. Start
+      # clean.
+      rm -f /var/lib/iwd/*.psk 2>/dev/null || true
       wifi_ssid=""
       wifi_pass=""
       wifi_prev=""
@@ -226,7 +245,8 @@ In VMware: VM Settings > Options > Advanced > Firmware type > UEFI."
         # spaces as plain names; our old hand-rolled rule hex-encoded them, so
         # the installed kiosk never matched the file and never autoconnected).
         # Must happen BEFORE `forget`, which deletes the file. At most one
-        # profile exists here: every earlier attempt was forgotten.
+        # profile exists here: every earlier attempt was forgotten (and stale
+        # profiles from a previous boot were removed at the top of this step).
         echo "Wi-Fi OK: connected to '$wifi_ssid'."
         shopt -s nullglob
         for f in /var/lib/iwd/*.psk; do
@@ -271,26 +291,29 @@ In VMware: VM Settings > Options > Advanced > Firmware type > UEFI."
 
       # ---- 6. target disk (default: largest internal) --------------------------
       # Exclude the device backing the installer medium itself, by name — some
-      # USB sticks lie about being removable (RM=0). /iso is mounted from either
-      # a partition (PKNAME = parent disk) or the whole device (PKNAME empty).
-      iso_src="$(findmnt -no SOURCE /iso)"
-      iso_disk="$(lsblk -no PKNAME "$iso_src" 2>/dev/null | head -n1)"
-      iso_disk="''${iso_disk:-$(basename "$iso_src")}"
+      # USB sticks lie about being removable (RM=0). `findmnt -T` resolves the
+      # mount containing the payload dir (a mountpoint on the ISO, a subdir of
+      # / on the USB image); readlink -f canonicalizes a by-label symlink
+      # source to the real /dev node. The medium is mounted from either a
+      # partition (PKNAME = parent disk) or the whole device (PKNAME empty).
+      installer_src="$(readlink -f "$(findmnt -no SOURCE -T "${payloadDir}")")"
+      installer_disk="$(lsblk -no PKNAME "$installer_src" 2>/dev/null | head -n1)"
+      installer_disk="''${installer_disk:-$(basename "$installer_src")}"
 
       mapfile -t disks < <(
         lsblk -dbno NAME,SIZE,TYPE,RM \
-          | awk -v skip="$iso_disk" \
+          | awk -v skip="$installer_disk" \
               '$3 == "disk" && $4 == 0 && $1 != skip && $1 !~ /^(zram|ram|loop)/ { print $1, $2 }' \
           | sort -k2 -rn
       )
       if [ "''${#disks[@]}" -eq 0 ]; then
-        die_pause "No internal disks found (installer USB /dev/$iso_disk is excluded)."
+        die_pause "No internal disks found (installer USB /dev/$installer_disk is excluded)."
       fi
       default_disk="/dev/''${disks[0]%% *}"
 
       echo
       echo "Available disks (installer USB excluded):"
-      lsblk -dpno NAME,SIZE,MODEL,TRAN | awk -v d="/dev/$iso_disk" '$1 != d'
+      lsblk -dpno NAME,SIZE,MODEL,TRAN | awk -v d="/dev/$installer_disk" '$1 != d'
       echo
       read -rp "Install to [$default_disk]: " disk
       disk="''${disk:-$default_disk}"
@@ -298,7 +321,7 @@ In VMware: VM Settings > Options > Advanced > Firmware type > UEFI."
         die_pause "$disk is not a block device."
       fi
       parent="$(lsblk -no PKNAME "$disk" 2>/dev/null | head -n1)"
-      if [ "$(basename "$disk")" = "$iso_disk" ] || [ "$parent" = "$iso_disk" ]; then
+      if [ "$(basename "$disk")" = "$installer_disk" ] || [ "$parent" = "$installer_disk" ]; then
         die_pause "$disk is the installer USB itself."
       fi
 
@@ -323,8 +346,8 @@ In VMware: VM Settings > Options > Advanced > Firmware type > UEFI."
       # ---- 8. verify + flash ----------------------------------------------------
       echo
       echo ">> Verifying image integrity..."
-      ( cd /iso && sha256sum -c mfd-kiosk.raw.zst.sha256 ) \
-        || die_pause "Image on this USB is corrupt/truncated. Re-burn the ISO and try again."
+      ( cd "${payloadDir}" && sha256sum -c mfd-kiosk.raw.zst.sha256 ) \
+        || die_pause "Image on this USB is corrupt/truncated. Re-write the installer USB and try again."
 
       echo ">> Writing image to $disk..."
       zstd -dc "$img" | dd of="$disk" bs=8M conv=fsync status=progress \
@@ -402,80 +425,77 @@ In VMware: VM Settings > Options > Advanced > Firmware type > UEFI."
   };
 in
 {
-  imports = [
-    "${modulesPath}/installer/cd-dvd/installation-cd-minimal.nix"
-  ];
-
-  image.fileName = lib.mkForce "mfd-kiosk-flasher${lib.optionalString isDebug "-debug"}.iso";
-
-  nix.settings.experimental-features = [ "nix-command" "flakes" ];
-  networking.hostName = "mfd-flasher";
-
-  # Bring up the same Wi-Fi stack the installed kiosk uses (iwd) so the wizard
-  # can live-test Wi-Fi credentials (scan + associate) before flashing. The
-  # radio stays idle until iwctl is driven by the wizard. Redistributable Wi-Fi
-  # firmware is already carried by the installer profile
-  # (hardware.enableRedistributableFirmware = true).
-  #
-  # 26.05's installer profile enables NetworkManager (for nmtui), whose default
-  # wpa_supplicant backend flips networking.wireless.enable = true — which is now
-  # mutually exclusive with iwd (assertion in the iwd module). We don't use NM:
-  # the wizard drives iwctl directly and would fight NM's connection management,
-  # so force it off and keep raw iwd (the flasher's pre-26.05 behavior). Wired
-  # DHCP for headless SSH provisioning still comes up via the installer default.
-  networking.networkmanager.enable = lib.mkForce false;
-  networking.wireless.iwd.enable = true;
-
-  # The live flasher boots from the ISO squashfs and never imports a ZFS pool
-  # (ZFS support is only carried because the installer profile bundles it), so
-  # adopt 26.11's upcoming default explicitly and silence the boot-time warning.
-  boot.zfs.forceImportRoot = false;
-
-  # SSH into the live flasher for headless provisioning (run `mfd-install`
-  # remotely). Reuses the recovery key(s) baked into the kiosk.
-  services.openssh.enable = true;
-  users.users.root.openssh.authorizedKeys.keys = kiosk.mfd.kiosk.adminKeys;
-
-  # Carry the compressed image (+ its checksum) as plain files on the ISO9660
-  # filesystem, NOT inside nix-store.squashfs. The live CD is mounted at /iso, so
-  # the wizard reads them from there. This keeps the store squashfs tiny and the
-  # boot robust against a truncated ISO; integrity is enforced at flash time.
-  isoImage.contents = [
-    { source = "${kioskFlash}/mfd-kiosk.raw.zst"; target = "/mfd-kiosk.raw.zst"; }
-    { source = "${kioskFlash}/mfd-kiosk.raw.zst.sha256"; target = "/mfd-kiosk.raw.zst.sha256"; }
-  ];
-
-  # The wizard owns tty1. The installer profile autologs in a `nixos` user
-  # there (set WITHOUT mkDefault, hence mkForce); a getty stays on tty2+ as the
-  # local escape hatch.
-  services.getty.autologinUser = lib.mkForce null;
-  systemd.services."getty@tty1".enable = false;
-  systemd.services."autovt@tty1".enable = false;
-
-  systemd.services.mfd-installer = {
-    description = "MFD kiosk install wizard";
-    wantedBy = [ "multi-user.target" ];
-    conflicts = [ "getty@tty1.service" ];
-    # Never rate-limit restarts: die_pause blocks on Enter, so a restart loop
-    # is always user-paced, and the wizard must survive any number of aborts.
-    unitConfig.StartLimitIntervalSec = 0;
-    serviceConfig = {
-      # idle = wait until boot jobs stop printing to the console (getty trick),
-      # without an After=multi-user.target ordering cycle.
-      Type = "idle";
-      ExecStart = "${mfdInstall}/bin/mfd-install";
-      StandardInput = "tty-force";
-      StandardOutput = "tty";
-      StandardError = "tty";
-      TTYPath = "/dev/tty1";
-      TTYReset = true;
-      TTYVHangup = true;
-      TTYVTDisallocate = true;
-      Restart = "always";
-      RestartSec = "2";
+  options.mfd.flasher = {
+    payloadDir = lib.mkOption {
+      # A plain string, NEVER a path — a path/store reference interpolated into
+      # the wizard script would drag the multi-GB payload into the flasher's
+      # runtime closure (squashfs on the ISO, store-bearing root on the USB
+      # image), doubling it on the medium.
+      type = lib.types.str;
+      description = "Absolute runtime directory holding mfd-kiosk.raw.zst + .sha256.";
+    };
+    payloadPackage = lib.mkOption {
+      type = lib.types.package;
+      description = "Derivation with mfd-kiosk.raw.zst + .sha256 under stable names, for the medium to embed.";
     };
   };
 
-  # Also runnable by hand (tty2 shell or SSH as root) for headless provisioning.
-  environment.systemPackages = [ mfdInstall ];
+  config = {
+    mfd.flasher.payloadPackage = kioskFlash;
+
+    nix.settings.experimental-features = [ "nix-command" "flakes" ];
+    networking.hostName = "mfd-flasher";
+
+    # Bring up the same Wi-Fi stack the installed kiosk uses (iwd) so the wizard
+    # can live-test Wi-Fi credentials (scan + associate) before flashing. The
+    # radio stays idle until iwctl is driven by the wizard. Redistributable
+    # Wi-Fi firmware is carried by both media (the ISO via the installer
+    # profile's hardware.enableAllHardware, the USB image via the same option
+    # set in flasher-usb.nix).
+    networking.wireless.iwd.enable = true;
+
+    # SSH into the live flasher for headless provisioning (run `mfd-install`
+    # remotely). Reuses the recovery key(s) baked into the kiosk.
+    services.openssh.enable = true;
+    users.users.root.openssh.authorizedKeys.keys = kiosk.mfd.kiosk.adminKeys;
+
+    # Passwordless root login on tty2+ as the local escape hatch. The ISO gets
+    # the same value from the installer profile (identical definitions merge);
+    # the USB image must set it itself.
+    users.users.root.initialHashedPassword = "";
+
+    # The wizard owns tty1. On the ISO the installer profile autologs in a
+    # `nixos` user there (set WITHOUT mkDefault, hence mkForce); on the USB
+    # image the mkForce is a harmless no-op. A getty stays on tty2+ either way.
+    services.getty.autologinUser = lib.mkForce null;
+    systemd.services."getty@tty1".enable = false;
+    systemd.services."autovt@tty1".enable = false;
+
+    systemd.services.mfd-installer = {
+      description = "MFD kiosk install wizard";
+      wantedBy = [ "multi-user.target" ];
+      conflicts = [ "getty@tty1.service" ];
+      # Never rate-limit restarts: die_pause blocks on Enter, so a restart loop
+      # is always user-paced, and the wizard must survive any number of aborts.
+      unitConfig.StartLimitIntervalSec = 0;
+      serviceConfig = {
+        # idle = wait until boot jobs stop printing to the console (getty trick),
+        # without an After=multi-user.target ordering cycle.
+        Type = "idle";
+        ExecStart = "${mfdInstall}/bin/mfd-install";
+        StandardInput = "tty-force";
+        StandardOutput = "tty";
+        StandardError = "tty";
+        TTYPath = "/dev/tty1";
+        TTYReset = true;
+        TTYVHangup = true;
+        TTYVTDisallocate = true;
+        Restart = "always";
+        RestartSec = "2";
+      };
+    };
+
+    # Also runnable by hand (tty2 shell or SSH as root) for headless provisioning.
+    environment.systemPackages = [ mfdInstall ];
+  };
 }
